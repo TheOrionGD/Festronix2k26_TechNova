@@ -196,13 +196,13 @@ app.post('/api/colleges', async (req, res) => {
   }
 });
 
-// Rate Limiter for Login Endpoint (10 requests per minute per IP)
+// Rate Limiter for Login Endpoint (200 requests per minute per IP to support shared lab network IPs)
 const loginRateLimitMap = new Map();
 function rateLimitLogin(req, res, next) {
   const ip = req.ip || req.headers['x-forwarded-for'] || '127.0.0.1';
   const now = Date.now();
   const windowMs = 60 * 1000;
-  const maxAttempts = 10;
+  const maxAttempts = 200;
 
   const record = loginRateLimitMap.get(ip) || { count: 0, resetTime: now + windowMs };
 
