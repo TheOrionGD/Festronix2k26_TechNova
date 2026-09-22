@@ -56,6 +56,9 @@ async function clearUserData() {
       const auditRes = await AuditLog.deleteMany({});
       console.log(`Deleted ${auditRes.deletedCount} audit logs.`);
 
+      await EventState.updateMany({}, { registrationCount: 0 });
+      console.log('Reset EventState registrationCount to 0.');
+
       await mongoose.disconnect();
       console.log('\n✅ SUCCESS: Database user collections have been completely cleared.');
     } catch (err) {

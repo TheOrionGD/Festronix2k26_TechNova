@@ -42,9 +42,9 @@ export default function LandingPage() {
   const [faqRef, faqVisible] = useScrollReveal({ threshold: 0.1 });
 
   // Animated counters for stats
-  const totalRegisteredRaw = eventState?.registrationCount || leaderboard?.length || 0;
-  const round1CountRaw = eventState?.round1QualifyCount || 30;
-  const round2CountRaw = eventState?.round2QualifyCount || 10;
+  const totalRegisteredRaw = eventState?.registrationCount ?? leaderboard?.length ?? 0;
+  const round1CountRaw = eventState?.round1QualifyCount ?? 30;
+  const round2CountRaw = eventState?.round2QualifyCount ?? 10;
 
   const countRegistered = useAnimatedCounter(totalRegisteredRaw, 1200, heroVisible);
   const countRound1 = useAnimatedCounter(round1CountRaw, 1000, heroVisible);

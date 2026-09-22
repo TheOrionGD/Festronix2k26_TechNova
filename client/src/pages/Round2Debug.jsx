@@ -15,28 +15,7 @@ import {
 } from 'lucide-react';
 
 export default function Round2Debug() {
-  const { currentUser, setIsCoordinatorModalOpen, setPendingVerificationProblemId, requestFullScreen, isOffline, leaderboard } = useApp();
-
-  const [isFullscreenActive, setIsFullscreenActive] = useState(
-    !!(document.fullscreenElement || document.webkitFullscreenElement)
-  );
-
-  useEffect(() => {
-    requestFullScreen();
-
-    const handleFullscreenChange = () => {
-      const active = !!(document.fullscreenElement || document.webkitFullscreenElement);
-      setIsFullscreenActive(active);
-    };
-
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
-
-    return () => {
-      document.removeEventListener('fullscreenchange', handleFullscreenChange);
-      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
-    };
-  }, []);
+  const { currentUser, setIsCoordinatorModalOpen, setPendingVerificationProblemId, isOffline, leaderboard } = useApp();
 
   const [problems, setProblems] = useState([]);
   const [currentProbIdx, setCurrentProbIdx] = useState(0);
@@ -304,26 +283,6 @@ export default function Round2Debug() {
         </main>
       </div>
 
-      {/* Full Screen Enforcement Modal Overlay (RELAXED DURING OFFLINE SYNC STATE) */}
-      {!isFullscreenActive && !isOffline && (
-        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-6 text-center animate-slide-up select-none">
-          <div className="max-w-md w-full bg-[#EFEEEA] border-2 border-[#D60303] rounded-2xl p-6 space-y-4 text-[#595959] shadow-2xl">
-            <div className="w-12 h-12 rounded-full bg-[#D60303]/10 text-[#D60303] flex items-center justify-center mx-auto">
-              <AlertTriangle className="w-7 h-7" />
-            </div>
-            <h3 className="text-lg font-black text-[#A30B1A] uppercase tracking-wide">FULL SCREEN REQUIRED</h3>
-            <p className="text-xs text-[#595959] leading-relaxed font-medium">
-              Round 2 (Debug It) requires Full Screen mode for local IDE workstation verification and anti-cheat compliance.
-            </p>
-            <button
-              onClick={() => requestFullScreen()}
-              className="w-full py-3 rounded-xl bg-[#D60303] hover:bg-[#C23D31] text-[#EFEEEA] font-bold text-xs uppercase tracking-wider shadow-md transition cursor-pointer btn-interactive"
-            >
-              ENABLE FULL SCREEN MODE
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

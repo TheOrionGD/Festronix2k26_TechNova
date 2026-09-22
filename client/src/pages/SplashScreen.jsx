@@ -75,8 +75,8 @@ export default function SplashScreen() {
     setTypedLines(calculated);
   }, [progress]);
 
-  const totalRegistered = eventState?.registrationCount || leaderboard?.length || 0;
-  const round1Qualifiers = eventState?.round1QualifyCount || 30;
+  const totalRegistered = eventState?.registrationCount ?? leaderboard?.length ?? 0;
+  const round1Qualifiers = eventState?.round1QualifyCount ?? 30;
 
   return (
     <div className="min-h-screen bg-zinc-950 text-[#EFEEEA] flex flex-col items-center justify-between p-4 sm:p-8 relative overflow-y-auto overflow-x-hidden font-sans">

@@ -12,6 +12,7 @@ const userSchema = new mongoose.Schema({
   password: { type: String, required: true },
   accountStatus: { type: String, enum: ['ACTIVE', 'LOCKED', 'SUSPENDED', 'PENDING'], default: 'ACTIVE' },
   assignedRound: { type: String, default: '' },
+  assignedCoordinator: { type: String, default: '' },
   pin: { type: String, default: '' },
   permissions: [{ type: String }] // e.g. MANAGE_QUESTIONS, MANAGE_DEBUG_PROBLEMS, MANAGE_CLUES
 }, { timestamps: true });
@@ -25,7 +26,18 @@ const eventStateSchema = new mongoose.Schema({
   round2QualifyCount: { type: Number, default: 10 },
   round3StationCount: { type: Number, default: 5 },
   registrationCount: { type: Number, default: 0 },
-  activeRound: { type: Number, default: 1 }
+  activeRound: { type: Number, default: 1 },
+  colleges: { 
+    type: [String], 
+    default: [
+      'K. Ramakrishnan College of Technology', 
+      'Anna University', 
+      'Saranathan College of Engineering', 
+      'National Institute of Technology Trichy', 
+      'SASTRA Deemed University',
+      'Government College of Engineering'
+    ] 
+  }
 }, { timestamps: true });
 
 // Question Schema (Round 1 MCQ)

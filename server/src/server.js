@@ -65,7 +65,15 @@ const memoryStore = {
     round2QualifyCount: 10,
     round3StationCount: 5,
     registrationCount: 0,
-    activeRound: 1
+    activeRound: 1,
+    colleges: [
+      'K. Ramakrishnan College of Technology', 
+      'Anna University', 
+      'Saranathan College of Engineering', 
+      'National Institute of Technology Trichy', 
+      'SASTRA Deemed University',
+      'Government College of Engineering'
+    ]
   },
   users: [],
   questions: [],
@@ -135,6 +143,59 @@ import jwt from 'jsonwebtoken';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'technova_secret_symposium_key_2026';
 
+// GET List of Colleges for Dropdowns
+app.get('/api/colleges', async (req, res) => {
+  try {
+    const defaultColleges = [
+      'K. Ramakrishnan College of Technology',
+      'Anna University',
+      'Saranathan College of Engineering',
+      'National Institute of Technology Trichy',
+      'SASTRA Deemed University',
+      'Government College of Engineering'
+    ];
+
+    let colleges = [];
+    if (isDbConnected) {
+      const state = await getEventState();
+      colleges = state?.colleges || defaultColleges;
+      const userColleges = await User.distinct('college', { college: { $ne: '' } });
+      colleges = Array.from(new Set([...colleges, ...userColleges, ...defaultColleges]));
+    } else {
+      const stateColleges = memoryStore.eventState.colleges || defaultColleges;
+      const userColleges = memoryStore.users.map(u => u.college).filter(Boolean);
+      colleges = Array.from(new Set([...stateColleges, ...userColleges, ...defaultColleges]));
+    }
+
+    res.json({ success: true, colleges });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST Add New College
+app.post('/api/colleges', async (req, res) => {
+  const { name } = req.body;
+  if (!name || !name.trim()) {
+    return res.status(400).json({ success: false, message: 'College name is required.' });
+  }
+  const cleanName = name.trim();
+
+  try {
+    if (isDbConnected) {
+      await EventState.updateOne({}, { $addToSet: { colleges: cleanName } });
+    } else {
+      if (!memoryStore.eventState.colleges) memoryStore.eventState.colleges = [];
+      if (!memoryStore.eventState.colleges.includes(cleanName)) {
+        memoryStore.eventState.colleges.push(cleanName);
+      }
+    }
+    res.json({ success: true, message: `College "${cleanName}" added successfully.` });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Rate Limiter for Login Endpoint (10 requests per minute per IP)
 const loginRateLimitMap = new Map();
 function rateLimitLogin(req, res, next) {
@@ -190,60 +251,343 @@ export function authorizeRole(...roles) {
   };
 }
 
-// Seed default accounts if memory store is empty
-const defaultUsers = [
-  {
-    id: 'ADMIN-01',
-    name: 'Technova Super Admin',
-    email: 'admin@technova.edu',
-    college: 'K. Ramakrishnan College of Technology',
-    department: 'CSE',
-    role: 'ADMIN',
-    password: bcrypt.hashSync('admin123', 10),
-    accountStatus: 'ACTIVE',
-    permissions: ['MANAGE_ALL', 'MANAGE_QUESTIONS', 'MANAGE_DEBUG_PROBLEMS', 'MANAGE_CLUES']
-  },
-  {
-    id: 'COORD-01',
-    name: 'Lab Coordinator 1',
-    email: 'coord@technova.edu',
-    college: 'K. Ramakrishnan College of Technology',
-    department: 'CSE',
-    role: 'COORDINATOR',
-    pin: '1234',
-    password: bcrypt.hashSync('coord123', 10),
-    accountStatus: 'ACTIVE',
-    permissions: ['VERIFY_DEBUG', 'MANAGE_QUESTIONS']
-  },
-  {
-    id: 'TN2026-001',
-    name: 'John Reynolds',
-    email: 'john@technova.edu',
-    college: 'K. Ramakrishnan College of Technology',
-    department: 'CSE',
-    role: 'PARTICIPANT',
-    password: bcrypt.hashSync('user123', 10),
-    accountStatus: 'ACTIVE',
-    permissions: []
-  }
-];
+// ----------------------------------------------------
+// USER CREATION & MANAGEMENT ROUTES (STRICT HIERARCHY)
+// ADMIN -> Creates COORDINATOR
+// COORDINATOR -> Creates PARTICIPANT (ID = Password)
+// ----------------------------------------------------
 
-memoryStore.users = [...defaultUsers];
-
-// Seed default users to MongoDB if DB connected and empty
-async function seedDefaultUsersToDb() {
-  if (!isDbConnected) return;
+app.get('/api/admin/users', async (req, res) => {
+  const { role } = req.query;
   try {
-    const count = await User.countDocuments();
-    if (count === 0) {
-      await User.insertMany(defaultUsers);
-      console.log('Default accounts (Admin, Coordinator, Participant) initialized in MongoDB.');
+    let list = [];
+    if (isDbConnected) {
+      const query = role ? { role: role.toUpperCase() } : {};
+      list = await User.find(query).select('-password');
+    } else {
+      list = role ? memoryStore.users.filter(u => u.role === role.toUpperCase()) : memoryStore.users;
     }
+    res.json({ success: true, count: list.length, users: list });
   } catch (err) {
-    console.error('Failed to seed default accounts in DB:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/admin/coordinators', async (req, res) => {
+  const { name, email, college, department, password, pin, assignedRound } = req.body;
+
+  if (!name || !email || !password) {
+    return res.status(400).json({ success: false, message: 'Name, email, and password are required for Coordinator creation.' });
+  }
+
+  try {
+    let count = 0;
+    if (isDbConnected) {
+      count = await User.countDocuments({ role: 'COORDINATOR' });
+    } else {
+      count = memoryStore.users.filter(u => u.role === 'COORDINATOR').length;
+    }
+
+    const coordId = `COORD-${String(count + 1).padStart(2, '0')}`;
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const newCoord = {
+      id: coordId,
+      name,
+      email: email.toLowerCase().trim(),
+      college: college || 'K. Ramakrishnan College of Technology',
+      department: department || 'CSE',
+      role: 'COORDINATOR',
+      password: hashedPassword,
+      pin: pin || '1234',
+      assignedRound: assignedRound || 'Round 2',
+      permissions: ['VERIFY_DEBUG', 'MANAGE_QUESTIONS'],
+      accountStatus: 'ACTIVE'
+    };
+
+    if (isDbConnected) {
+      await User.create(newCoord);
+    } else {
+      memoryStore.users.push(newCoord);
+    }
+
+    await createAuditLog('ADMIN', 'ADMIN', 'COORDINATOR_CREATED', coordId, { name, email });
+    const safeUser = { ...newCoord };
+    delete safeUser.password;
+
+    res.json({ success: true, user: safeUser, message: `Coordinator ${coordId} created successfully.` });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Dynamic Equal Participant Segregation Algorithm
+async function autoAssignParticipants() {
+  try {
+    let coordinators = [];
+    let participants = [];
+
+    if (isDbConnected) {
+      coordinators = await User.find({ role: 'COORDINATOR' }).sort({ id: 1 });
+      participants = await User.find({ role: 'PARTICIPANT' }).sort({ id: 1 });
+    } else {
+      coordinators = memoryStore.users.filter(u => u.role === 'COORDINATOR').sort((a, b) => a.id.localeCompare(b.id));
+      participants = memoryStore.users.filter(u => u.role === 'PARTICIPANT').sort((a, b) => a.id.localeCompare(b.id));
+    }
+
+    if (coordinators.length === 0 || participants.length === 0) {
+      return { success: true, totalParticipants: participants.length, totalCoordinators: coordinators.length, matrix: [] };
+    }
+
+    const N = participants.length;
+    const C = coordinators.length;
+
+    // Mathematical Equal Segregation Algorithm
+    const k = Math.floor(N / C); // base allocation per coordinator
+    const r = N % C; // remainder to distribute among first r coordinators
+
+    let currentIdx = 0;
+    const matrix = [];
+
+    for (let i = 0; i < C; i++) {
+      const coord = coordinators[i];
+      const quota = i < r ? k + 1 : k;
+      const assignedGroup = participants.slice(currentIdx, currentIdx + quota);
+      currentIdx += quota;
+
+      const participantIds = assignedGroup.map(p => p.id);
+      const labName = coord.assignedRound || `Lab Terminal ${i + 1}`;
+
+      for (const p of assignedGroup) {
+        if (isDbConnected) {
+          await User.updateOne(
+            { _id: p._id },
+            { $set: { assignedCoordinator: coord.id, assignedRound: labName } }
+          );
+        } else {
+          p.assignedCoordinator = coord.id;
+          p.assignedRound = labName;
+        }
+      }
+
+      matrix.push({
+        coordinatorId: coord.id,
+        coordinatorName: coord.name,
+        coordinatorEmail: coord.email,
+        assignedLab: labName,
+        allocatedCount: assignedGroup.length,
+        participantIds: participantIds,
+        startId: participantIds.length > 0 ? participantIds[0] : null,
+        endId: participantIds.length > 0 ? participantIds[participantIds.length - 1] : null
+      });
+    }
+
+    return { success: true, totalParticipants: N, totalCoordinators: C, matrix };
+  } catch (err) {
+    console.error('Error in autoAssignParticipants:', err);
+    return { success: false, error: err.message };
   }
 }
-seedDefaultUsersToDb();
+
+app.get('/api/admin/participant-segregation', async (req, res) => {
+  try {
+    const result = await autoAssignParticipants();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/admin/auto-assign-participants', async (req, res) => {
+  try {
+    const result = await autoAssignParticipants();
+    res.json({ success: true, message: 'Participants auto-assigned equally across all Lab Coordinators.', ...result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/coordinator/participants', async (req, res) => {
+  const { name, email, college, department, year } = req.body;
+
+  if (!name || !email) {
+    return res.status(400).json({ success: false, message: 'Participant name and email are required.' });
+  }
+
+  try {
+    let count = 0;
+    if (isDbConnected) {
+      count = await User.countDocuments({ role: 'PARTICIPANT' });
+    } else {
+      count = memoryStore.users.filter(u => u.role === 'PARTICIPANT').length;
+    }
+
+    const participantId = `TN2026-${String(count + 1).padStart(3, '0')}`;
+    // User ID and Password are identical for Participants
+    const hashedPassword = await bcrypt.hash(participantId, 10);
+
+    const newParticipant = {
+      id: participantId,
+      name,
+      email: email.toLowerCase().trim(),
+      college: college || 'K. Ramakrishnan College of Technology',
+      department: department || 'CSE',
+      year: year || 'III',
+      role: 'PARTICIPANT',
+      password: hashedPassword,
+      accountStatus: 'ACTIVE'
+    };
+
+    if (isDbConnected) {
+      await User.create(newParticipant);
+      await EventState.updateOne({}, { $inc: { registrationCount: 1 } });
+    } else {
+      memoryStore.users.push(newParticipant);
+      memoryStore.eventState.registrationCount += 1;
+    }
+
+    // Trigger equal segregation auto-assignment
+    await autoAssignParticipants();
+
+    const currentState = await getEventState();
+    io.emit('eventState:updated', currentState);
+
+    const safeUser = { ...newParticipant };
+    delete safeUser.password;
+
+    res.json({ 
+      success: true, 
+      user: safeUser, 
+      generatedPassword: participantId,
+      message: `Participant ${participantId} created successfully. Password set identical to User ID.` 
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/coordinator/participants/bulk', async (req, res) => {
+  const { participantsList } = req.body;
+  if (!Array.isArray(participantsList)) {
+    return res.status(400).json({ success: false, message: 'Invalid payload. Array of participants expected.' });
+  }
+
+  try {
+    let createdCount = 0;
+    let currentCount = 0;
+    if (isDbConnected) {
+      currentCount = await User.countDocuments({ role: 'PARTICIPANT' });
+    } else {
+      currentCount = memoryStore.users.filter(u => u.role === 'PARTICIPANT').length;
+    }
+
+    const createdUsers = [];
+    for (const p of participantsList) {
+      if (!p.name || !p.email) continue;
+      currentCount++;
+      const pid = `TN2026-${String(currentCount).padStart(3, '0')}`;
+      const hashedPassword = await bcrypt.hash(pid, 10);
+
+      const userObj = {
+        id: pid,
+        name: p.name,
+        email: String(p.email).toLowerCase().trim(),
+        college: p.college || 'K. Ramakrishnan College of Technology',
+        department: p.department || 'CSE',
+        year: p.year || 'III',
+        role: 'PARTICIPANT',
+        password: hashedPassword,
+        accountStatus: 'ACTIVE'
+      };
+
+      if (isDbConnected) {
+        await User.create(userObj);
+      } else {
+        memoryStore.users.push(userObj);
+      }
+      createdCount++;
+      createdUsers.push({ id: pid, name: p.name, email: p.email });
+    }
+
+    if (isDbConnected) {
+      await EventState.updateOne({}, { $inc: { registrationCount: createdCount } });
+    } else {
+      memoryStore.eventState.registrationCount += createdCount;
+    }
+
+    // Trigger equal segregation auto-assignment
+    await autoAssignParticipants();
+
+    const currentState = await getEventState();
+    io.emit('eventState:updated', currentState);
+
+    res.json({
+      success: true,
+      createdCount,
+      users: createdUsers,
+      message: `Successfully created ${createdCount} participants with ID = Password credentials.`
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.put('/api/admin/users/:id', async (req, res) => {
+  const { id } = req.params;
+  const { name, email, password, pin, assignedRound, accountStatus, role } = req.body;
+
+  try {
+    const updates = {};
+    if (name) updates.name = name.trim();
+    if (email) updates.email = email.toLowerCase().trim();
+    if (pin !== undefined) updates.pin = String(pin).trim();
+    if (assignedRound !== undefined) updates.assignedRound = String(assignedRound).trim();
+    if (accountStatus) updates.accountStatus = accountStatus;
+    if (role) updates.role = role.toUpperCase();
+    if (password && password.trim().length > 0) {
+      updates.password = await bcrypt.hash(password.trim(), 10);
+    }
+
+    let updatedUser = null;
+    if (isDbConnected) {
+      updatedUser = await User.findOneAndUpdate({ id }, updates, { new: true }).select('-password');
+    } else {
+      const idx = memoryStore.users.findIndex(u => u.id === id);
+      if (idx >= 0) {
+        memoryStore.users[idx] = { ...memoryStore.users[idx], ...updates };
+        updatedUser = { ...memoryStore.users[idx] };
+        delete updatedUser.password;
+      }
+    }
+
+    if (!updatedUser) {
+      return res.status(404).json({ success: false, message: `User ${id} not found.` });
+    }
+
+    await createAuditLog('ADMIN', 'ADMIN', 'USER_CREDENTIALS_MODIFIED', id, { updates: Object.keys(updates) });
+
+    res.json({
+      success: true,
+      user: updatedUser,
+      message: `User ${id} authentication record updated successfully.`
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.delete('/api/users/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    if (isDbConnected) {
+      await User.deleteOne({ id });
+    } else {
+      memoryStore.users = memoryStore.users.filter(u => u.id !== id);
+    }
+    res.json({ success: true, message: `User ${id} deleted successfully.` });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 app.get('/', (req, res) => {
   res.json({

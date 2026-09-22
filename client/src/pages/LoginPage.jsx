@@ -230,41 +230,6 @@ export default function LoginPage() {
               </button>
             </form>
           </div>
-
-          {/* Quick-Fill Test Accounts Strip */}
-          <div className="pt-4 border-t border-zinc-100 space-y-2">
-            <span className="text-[10px] font-mono font-bold text-zinc-400 uppercase tracking-wider block">
-              QUICK TEST CREDENTIALS (CLICK TO AUTO-FILL)
-            </span>
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => handleQuickFill('TN2026-001', 'user123')}
-                className="p-2 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 rounded-lg text-left transition cursor-pointer btn-interactive"
-              >
-                <span className="block text-[10px] font-bold text-zinc-700">Participant</span>
-                <span className="text-[9px] font-mono text-zinc-500">TN2026-001</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleQuickFill('COORD-01', 'coord123')}
-                className="p-2 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 rounded-lg text-left transition cursor-pointer btn-interactive"
-              >
-                <span className="block text-[10px] font-bold text-zinc-700">Coordinator</span>
-                <span className="text-[9px] font-mono text-zinc-500">COORD-01</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleQuickFill('ADMIN-01', 'admin123')}
-                className="p-2 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 rounded-lg text-left transition cursor-pointer btn-interactive"
-              >
-                <span className="block text-[10px] font-bold text-zinc-700">Admin</span>
-                <span className="text-[9px] font-mono text-zinc-500">ADMIN-01</span>
-              </button>
-            </div>
-          </div>
         </div>
       </div>
     </div>
