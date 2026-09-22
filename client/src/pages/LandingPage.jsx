@@ -13,18 +13,23 @@ import {
   Sparkles,
   ShieldAlert,
   FileText,
-  HelpCircle,
   Award,
-  Layers,
   ChevronDown,
   ChevronUp,
   Lock,
-  UserCheck
+  UserCheck,
+  Calendar,
+  MapPin,
+  Phone,
+  User,
+  Maximize2,
+  X
 } from 'lucide-react';
 
 export default function LandingPage() {
   const { setCurrentScreen, leaderboard, eventState } = useApp();
   const [activeFaq, setActiveFaq] = useState(null);
+  const [showPosterModal, setShowPosterModal] = useState(false);
 
   const toggleFaq = (index) => {
     setActiveFaq(activeFaq === index ? null : index);
@@ -33,6 +38,10 @@ export default function LandingPage() {
   const totalRegistered = eventState?.registrationCount || leaderboard?.length || 0;
 
   const faqs = [
+    {
+      q: "What is the team size for TECHNOVA 2026?",
+      a: "Each team consists of 2 members. Both members must actively participate throughout all event rounds."
+    },
     {
       q: "What happens if I accidentally refresh or close my browser during Round 1?",
       a: "Your attempt state and countdown timer are securely stored on the server. Re-opening the portal will resume your quiz seamlessly with the remaining time intact."
@@ -94,16 +103,16 @@ export default function LandingPage() {
       <header className="relative z-10 pt-14 pb-12 px-6 max-w-6xl mx-auto text-center space-y-8">
         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-red-50 border border-red-200 text-red-700 text-xs font-semibold shadow-2xs">
           <Sparkles className="w-4 h-4 text-[#DC2626]" />
-          <span>K. Ramakrishnan College of Technology — Annual Technical Symposium 2026</span>
+          <span>Department of Computer Science & Engineering Presents</span>
         </div>
 
         <h1 className="text-4xl sm:text-6xl font-black tracking-tight leading-tight max-w-4xl mx-auto text-zinc-900">
-          The Ultimate Multi-Stage <br />
-          <span className="text-[#DC2626]">Competition Platform</span>
+          TECHNOVA 2026 <br />
+          <span className="text-[#DC2626]">National Level Technical Symposium</span>
         </h1>
 
         <p className="text-sm sm:text-base text-zinc-600 max-w-2xl mx-auto leading-relaxed font-normal">
-          A controlled multi-stage tournament engineered to test computer science mastery, rapid local debugging proficiency, and technical clue solving.
+          Code the Ideas • Build the Tomorrow. An elite competition engineered for competitive programming, rapid debugging, and clue solving.
         </p>
 
         {/* Action CTAs */}
@@ -115,10 +124,43 @@ export default function LandingPage() {
             <span>Enter Competition Portal</span>
             <ArrowRight className="w-5 h-5" />
           </button>
+          
+          <button
+            onClick={() => setShowPosterModal(true)}
+            className="px-6 py-3.5 rounded-xl bg-white hover:bg-zinc-50 border border-zinc-300 text-zinc-800 font-semibold text-sm shadow-sm transition flex items-center gap-2 cursor-pointer"
+          >
+            <Maximize2 className="w-4 h-4 text-[#DC2626]" />
+            <span>View Official Event Poster</span>
+          </button>
+        </div>
+
+        {/* Key Event Quick Info Banner */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-4xl mx-auto pt-4">
+          <div className="bg-white p-4 rounded-xl border border-zinc-200 shadow-xs flex items-center justify-center gap-3">
+            <Calendar className="w-5 h-5 text-[#DC2626]" />
+            <div className="text-left">
+              <span className="block text-[10px] font-mono text-zinc-400 uppercase">EVENT DATE</span>
+              <span className="text-xs font-bold text-zinc-900">25 / 09 / 2026 (Friday)</span>
+            </div>
+          </div>
+          <div className="bg-white p-4 rounded-xl border border-zinc-200 shadow-xs flex items-center justify-center gap-3">
+            <MapPin className="w-5 h-5 text-[#DC2626]" />
+            <div className="text-left">
+              <span className="block text-[10px] font-mono text-zinc-400 uppercase">VENUE</span>
+              <span className="text-xs font-bold text-zinc-900">Circuit Block, 3rd Floor (Lab 1 & 2)</span>
+            </div>
+          </div>
+          <div className="bg-white p-4 rounded-xl border border-zinc-200 shadow-xs flex items-center justify-center gap-3">
+            <Phone className="w-5 h-5 text-[#DC2626]" />
+            <div className="text-left">
+              <span className="block text-[10px] font-mono text-zinc-400 uppercase">STUDENT CO-ORDINATOR</span>
+              <span className="text-xs font-bold text-zinc-900">Godfrey T R (9344462238)</span>
+            </div>
+          </div>
         </div>
 
         {/* Real-time Overview Stats Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto pt-8">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto pt-4">
           <div className="bg-white p-5 rounded-2xl text-center space-y-1 border border-zinc-200/80 shadow-xs">
             <Users className="w-5 h-5 text-[#DC2626] mx-auto" />
             <p className="text-2xl font-black text-zinc-900 font-mono">{totalRegistered}</p>
@@ -141,6 +183,90 @@ export default function LandingPage() {
           </div>
         </div>
       </header>
+
+      {/* SECTION: OFFICIAL SYMPOSIUM POSTER SHOWCASE */}
+      <section className="relative z-10 py-12 px-6 max-w-6xl mx-auto w-full space-y-8">
+        <div className="text-center space-y-2">
+          <span className="text-xs font-mono font-bold text-[#DC2626] uppercase tracking-widest">OFFICIAL BROCHURE</span>
+          <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-zinc-900">
+            Event Poster & Announcement
+          </h2>
+          <p className="text-xs sm:text-sm text-zinc-500 max-w-xl mx-auto font-normal">
+            Department of Computer Science & Engineering — Official TECHNOVA 2026 Poster.
+          </p>
+        </div>
+
+        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-zinc-200/80 shadow-lg max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-12 gap-8 items-center">
+          {/* Poster Image Preview with Zoom hover */}
+          <div 
+            onClick={() => setShowPosterModal(true)}
+            className="md:col-span-6 relative rounded-2xl overflow-hidden border border-zinc-200 shadow-md group cursor-pointer aspect-[3/4] bg-zinc-900"
+          >
+            <img 
+              src="/poster.png" 
+              alt="TECHNOVA 2026 Official Event Poster" 
+              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+            />
+            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white gap-2 font-semibold text-xs">
+              <Maximize2 className="w-5 h-5" />
+              <span>Click to Expand Poster</span>
+            </div>
+          </div>
+
+          {/* Key Contacts & Overview */}
+          <div className="md:col-span-6 space-y-6 text-left">
+            <div>
+              <span className="px-3 py-1 rounded-full bg-red-100 text-[#DC2626] text-[11px] font-bold font-mono">
+                NATIONAL LEVEL SYMPOSIUM
+              </span>
+              <h3 className="text-2xl font-black text-zinc-900 mt-2">TECHNOVA 2026</h3>
+              <p className="text-xs text-zinc-500 mt-1">"Ideas Today, A Smarter Tomorrow"</p>
+            </div>
+
+            <div className="space-y-3 pt-2 text-xs text-zinc-600">
+              <div className="flex items-start gap-3">
+                <Calendar className="w-4 h-4 text-[#DC2626] shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold text-zinc-900 block">Date & Schedule</span>
+                  <span>25th September 2026 (Friday)</span>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <MapPin className="w-4 h-4 text-[#DC2626] shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold text-zinc-900 block">Location</span>
+                  <span>Technova: Lab 1 & 2 → Circuit Block, 3rd Floor</span>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <User className="w-4 h-4 text-[#DC2626] shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold text-zinc-900 block">Staff Coordinator</span>
+                  <span>Mrs. Vallipriyadharshini (Dept. of CSE)</span>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <Phone className="w-4 h-4 text-[#DC2626] shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold text-zinc-900 block">Student Coordinator</span>
+                  <span>Godfrey T R — Phone: <a href="tel:9344462238" className="text-[#DC2626] font-bold hover:underline">9344462238</a></span>
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowPosterModal(true)}
+              className="w-full py-3 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white font-semibold text-xs shadow-md transition flex items-center justify-center gap-2"
+            >
+              <Maximize2 className="w-4 h-4" />
+              <span>Full Screen Poster View</span>
+            </button>
+          </div>
+        </div>
+      </section>
 
       {/* SECTION 1: THE 3 COMPETITION STAGES */}
       <section className="relative z-10 py-12 px-6 max-w-6xl mx-auto space-y-8 w-full">
@@ -450,6 +576,36 @@ export default function LandingPage() {
           ))}
         </div>
       </section>
+
+      {/* POSTER MODAL LIGHTBOX */}
+      {showPosterModal && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 sm:p-6"
+          onClick={() => setShowPosterModal(false)}
+        >
+          <div 
+            className="relative max-w-3xl w-full max-h-[90vh] bg-zinc-900 rounded-2xl overflow-hidden shadow-2xl flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 bg-zinc-900 text-white flex items-center justify-between border-b border-zinc-800">
+              <span className="text-xs font-mono font-bold text-red-500">TECHNOVA 2026 OFFICIAL POSTER</span>
+              <button 
+                onClick={() => setShowPosterModal(false)}
+                className="p-1 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="overflow-auto p-4 flex items-center justify-center">
+              <img 
+                src="/poster.png" 
+                alt="TECHNOVA 2026 Full Poster" 
+                className="max-h-[80vh] w-auto object-contain rounded-lg shadow-md"
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Footer */}
       <footer className="mt-auto relative z-10 border-t border-zinc-200 py-10 px-8 bg-white">
