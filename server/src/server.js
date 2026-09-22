@@ -126,7 +126,17 @@ async function getEventState() {
 // PUBLIC & AUTH ROUTES
 // ----------------------------------------------------
 
+app.get('/', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Technova 2026 Event Management Server is running.',
+    health: '/api/health',
+    status: '/api/event/status'
+  });
+});
+
 app.get('/api/health', (req, res) => {
+
   res.json({ status: 'ok', dbConnected: isDbConnected, timestamp: new Date() });
 });
 
