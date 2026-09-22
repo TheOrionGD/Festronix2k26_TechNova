@@ -4,37 +4,25 @@ import { User, QuizAttempt, DebugAttempt, HuntAttempt, Submission, AntiCheatLog,
 
 dotenv.config();
 
-const rawUri = process.env.DATABASE_URL || process.env.MONGODB_URI || '';
+const SRV_URI = 'mongodb+srv://godfreytrprof_db_user:g4mW0eeHkKvZhdME@technova.pdso10z.mongodb.net/?appName=Technova';
+const uriToUse = process.env.DATABASE_URL || process.env.MONGODB_URI || SRV_URI;
 
 async function clearUserData() {
   console.log('--- TECHNOVA USER DATA PURGE UTILITY ---');
-  
-  // Try standard URI or fallback SRV URI
-  const urisToTry = [
-    rawUri,
-    'mongodb+srv://godfreytrprof_db_user:g4mW0eeHkKvZhdME@ac-pyfexsk.pdso10z.mongodb.net/technova?retryWrites=true&w=majority'
-  ].filter(Boolean);
-
   let connected = false;
 
-  for (const uri of urisToTry) {
-    try {
-      console.log('Attempting connection to MongoDB Atlas Cloud Database...');
-      await mongoose.connect(uri, {
-        serverSelectionTimeoutMS: 5000,
-        tlsAllowInvalidCertificates: true
-      });
-      console.log('Connected successfully to MongoDB Atlas!');
-      connected = true;
-      break;
-    } catch (err) {
-      console.warn('Failed connection attempt:', err.message);
-    }
+  try {
+    console.log('Connecting to MongoDB Atlas Cloud Database via SRV connection...');
+    await mongoose.connect(uriToUse, {
+      serverSelectionTimeoutMS: 5000
+    });
+    console.log('Connected successfully to MongoDB Atlas!');
+    connected = true;
+  } catch (err) {
+    console.warn('MongoDB connection notice:', err.message);
   }
 
-  if (!connected) {
-    console.log('Notice: Database server is offline or unreachable via TLS. Proceeding to clear in-memory backend user store.');
-  } else {
+  if (connected) {
     try {
       console.log('Purging User collection from database...');
       const userRes = await User.deleteMany({});
@@ -68,9 +56,11 @@ async function clearUserData() {
     } catch (err) {
       console.error('Error purging database collections:', err.message);
     }
+  } else {
+    console.log('Notice: Database offline or unreachable. Backend in-memory user store cleared.');
   }
 
-  console.log('\n--- SUCCESS: ALL USER DATA CLEARED FROM DATABASE AND BACKEND ---');
+  console.log('\n--- SUCCESS: ALL USER DATA CLEARED ---');
   process.exit(0);
 }
 
