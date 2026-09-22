@@ -459,9 +459,9 @@ Technova/
 
 * **Node.js:** `v18.0.0` or higher
 * **npm:** `v9.0.0` or higher
-* **MongoDB:** Local MongoDB instance (`mongodb://127.0.0.1:27017/technova`) or MongoDB Atlas URI (Optional — system operates in dynamic memory mode if unavailable).
+* **MongoDB:** MongoDB Atlas Cloud Instance (or dynamic in-memory store if offline).
 
-### Step-by-Step Setup Instructions
+### Production Configuration & Setup Instructions
 
 #### 1. Clone Repository & Install Dependencies
 
@@ -479,20 +479,22 @@ cd ../client
 npm install
 ```
 
-#### 2. Configure Environment Variables
+#### 2. Production Environment Variables Setup
 
 Create `.env` in `server/`:
 
 ```env
 PORT=5000
-MONGODB_URI=mongodb://127.0.0.1:27017/technova
+DATABASE_URL=mongodb+srv://technova:technova2026@cluster0.mongodb.net/technova?retryWrites=true&w=majority
+MONGODB_URI=mongodb+srv://technova:technova2026@cluster0.mongodb.net/technova?retryWrites=true&w=majority
 JWT_SECRET=technova_secret_symposium_key_2026
 ```
 
 Create `.env` in `client/`:
 
 ```env
-VITE_API_BASE=http://localhost:5000/api
+VITE_BACKEND_URL=https://festronix2k26-technova.onrender.com
+VITE_API_BASE_URL=https://festronix2k26-technova.onrender.com/api
 ```
 
 #### 3. Default Credentials (Pre-Configured Out-of-the-Box)
@@ -505,20 +507,20 @@ The system automatically initializes default accounts if the database or memory 
 | **Coordinator** | `COORD-01` or `coord@technova.edu` | `coord123` | `1234` |
 | **Participant** | `TN2026-001` or `john@technova.edu` | `user123` | N/A |
 
-#### 4. Run Servers
+#### 4. Run Servers (Production Server Deployment)
 
-Start Backend Server:
+Start Backend Production Server:
 ```bash
 cd server
-npm run dev
-# Running on http://localhost:5000
+npm start
+# Production Live Server: https://festronix2k26-technova.onrender.com
 ```
 
 Start Frontend Client:
 ```bash
 cd client
-npm run dev
-# Running on http://localhost:5173
+npm run build && npm run preview
+# Production Client URL: https://festronix2k26-technova.onrender.com (or Vercel client deployment)
 ```
 
 ---
