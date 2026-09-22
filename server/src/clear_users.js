@@ -5,42 +5,31 @@ import { User, QuizAttempt, DebugAttempt, HuntAttempt, Submission, AntiCheatLog,
 
 dotenv.config();
 
-// Set IPv4 first for Node DNS resolution on Windows networks
 try {
   dns.setDefaultResultOrder('ipv4first');
 } catch (e) {}
 
-const srvUri = 'mongodb+srv://godfreytrprof_db_user:g4mW0eeHkKvZhdME@technova.pdso10z.mongodb.net/?appName=Technova';
-const directUri = 'mongodb://godfreytrprof_db_user:g4mW0eeHkKvZhdME@ac-pyfexsk-shard-00-00.pdso10z.mongodb.net:27017,ac-pyfexsk-shard-00-01.pdso10z.mongodb.net:27017,ac-pyfexsk-shard-00-02.pdso10z.mongodb.net:27017/technova?ssl=true&replicaSet=atlas-11tpyg-shard-0&authSource=admin&appName=Technova';
-
-const urisToTry = [
-  process.env.DATABASE_URL,
-  process.env.MONGODB_URI,
-  srvUri,
-  directUri
-].filter(Boolean);
+const mongoUri = process.env.DATABASE_URL || process.env.MONGODB_URI || '';
 
 async function clearUserData() {
   console.log('--- TECHNOVA USER DATA PURGE UTILITY ---');
-  let connected = false;
 
-  for (let i = 0; i < urisToTry.length; i++) {
-    const uri = urisToTry[i];
-    console.log(`[Attempt ${i + 1}/${urisToTry.length}] Connecting to MongoDB Atlas Cloud Database...`);
-    try {
-      await mongoose.connect(uri, {
-        serverSelectionTimeoutMS: 8000,
-        connectTimeoutMS: 10000
-      });
-      console.log('✅ Connected successfully to MongoDB Atlas!');
-      connected = true;
-      break;
-    } catch (err) {
-      console.warn(`Attempt ${i + 1} failed:`, err.message);
-      if (mongoose.connection.readyState !== 0) {
-        await mongoose.disconnect().catch(() => {});
-      }
-    }
+  if (!mongoUri) {
+    console.error('❌ Error: Neither DATABASE_URL nor MONGODB_URI is set in process.env. Aborting purge.');
+    process.exit(1);
+  }
+
+  let connected = false;
+  try {
+    console.log('Connecting to MongoDB Atlas Cloud Database using process.env...');
+    await mongoose.connect(mongoUri, {
+      serverSelectionTimeoutMS: 8000,
+      connectTimeoutMS: 10000
+    });
+    console.log('✅ Connected successfully to MongoDB Atlas!');
+    connected = true;
+  } catch (err) {
+    console.error('❌ Connection failed:', err.message);
   }
 
   if (connected) {
@@ -72,8 +61,6 @@ async function clearUserData() {
     } catch (err) {
       console.error('❌ Error purging database collections:', err.message);
     }
-  } else {
-    console.log('\n⚠️ Notice: Could not connect to remote database (Network/DNS/TLS blocked). Local in-memory store reset performed.');
   }
 
   console.log('--- PURGE COMPLETE ---');

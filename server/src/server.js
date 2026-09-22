@@ -40,22 +40,18 @@ let isDbConnected = false;
 import fs from 'fs';
 import path from 'path';
 
-const primaryUri = process.env.DATABASE_URL || process.env.MONGODB_URI || 'mongodb+srv://godfreytrprof_db_user:g4mW0eeHkKvZhdME@technova.pdso10z.mongodb.net/?appName=Technova';
-const directUri = 'mongodb://godfreytrprof_db_user:g4mW0eeHkKvZhdME@ac-pyfexsk-shard-00-00.pdso10z.mongodb.net:27017,ac-pyfexsk-shard-00-01.pdso10z.mongodb.net:27017,ac-pyfexsk-shard-00-02.pdso10z.mongodb.net:27017/technova?ssl=true&replicaSet=atlas-11tpyg-shard-0&authSource=admin&appName=Technova';
-
 async function connectDatabase() {
-  const uris = [primaryUri, directUri];
-  for (const uri of uris) {
-    try {
-      await mongoose.connect(uri, { serverSelectionTimeoutMS: 5000 });
-      isDbConnected = true;
-      console.log('MongoDB Cloud Atlas connected successfully.');
-      return;
-    } catch (err) {
-      console.warn('MongoDB connection attempt notice:', err.message);
-    }
+  if (!MONGODB_URI) {
+    console.log('MongoDB Connection Notice: DATABASE_URL not configured in process.env. Operating in local dynamic memory mode.');
+    return;
   }
-  console.log('MongoDB Connection Notice: Operating in local dynamic memory mode.');
+  try {
+    await mongoose.connect(MONGODB_URI, { serverSelectionTimeoutMS: 5000 });
+    isDbConnected = true;
+    console.log('MongoDB Cloud Atlas connected successfully.');
+  } catch (err) {
+    console.warn('MongoDB Connection Notice: Operating in local dynamic memory mode.', err.message);
+  }
 }
 connectDatabase();
 

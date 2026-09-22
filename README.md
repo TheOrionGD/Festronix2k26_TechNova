@@ -485,9 +485,9 @@ Create `.env` in `server/`:
 
 ```env
 PORT=5000
-DATABASE_URL=mongodb+srv://godfreytrprof_db_user:g4mW0eeHkKvZhdME@technova.pdso10z.mongodb.net/?appName=Technova
-MONGODB_URI=mongodb+srv://godfreytrprof_db_user:g4mW0eeHkKvZhdME@technova.pdso10z.mongodb.net/?appName=Technova
-JWT_SECRET=technova_secret_symposium_key_2026
+DATABASE_URL=mongodb+srv://<username>:<password>@cluster.mongodb.net/technova?retryWrites=true&w=majority
+MONGODB_URI=mongodb+srv://<username>:<password>@cluster.mongodb.net/technova?retryWrites=true&w=majority
+JWT_SECRET=your_jwt_secret_key_here
 ```
 
 Create `.env` in `client/`:
