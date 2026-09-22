@@ -1,0 +1,2075 @@
+Yes. Based on the process we've finalized, I would build this as a **single React + JavaScript TECHNOVA Event Management System**, not as three disconnected tools.
+
+Below is a master prompt you can give directly to a coding agent such as Cursor, Claude Code, Gemini, or another development agent.
+
+````markdown
+# TECHNOVA — DECODE, DEBUG & DISCOVER
+## Complete Symposium Event Management & Competition System
+
+You are a senior full-stack engineer, UI/UX engineer, database architect, and event-management-system designer.
+
+Build a complete production-ready web application called:
+
+**TECHNOVA — Decode, Debug & Discover**
+
+This is a technical symposium competition system consisting of three progressive rounds:
+
+1. ROUND 1 — TECH QUIZ
+2. ROUND 2 — DEBUG IT
+3. ROUND 3 — TECH HUNT
+
+The application must provide:
+- Participant portal
+- Coordinator portal
+- Admin dashboard
+- Live scoreboards
+- Round management
+- Question management
+- Participant management
+- Round qualification/elimination
+- Debugging verification workflow
+- Technical hunt progression
+- Audit logging
+- Timing
+- Anti-cheating monitoring signals
+- Role-based access control
+- Real-time updates where appropriate
+
+The system must be designed to support approximately **100 concurrent participants** for Round 1 and approximately 30 participants for Round 2 and 10 participants for Round 3.
+
+---
+
+# 1. TECHNOLOGY REQUIREMENTS
+
+## Frontend
+
+Use:
+
+- React.js
+- JavaScript
+- Vite
+- React Router
+- Tailwind CSS
+- Context API or an appropriate lightweight state-management solution
+- Axios/fetch for API communication
+- Socket.IO client for real-time updates where required
+
+Do NOT use TypeScript.
+
+The codebase must be JavaScript-based.
+
+## Backend
+
+Use:
+
+- Node.js
+- Express.js
+- JavaScript
+- Socket.IO
+
+## Database
+
+Use:
+
+- MongoDB
+- Mongoose
+
+## Authentication
+
+Implement secure authentication with:
+
+- JWT
+- Role-based authorization
+
+Roles:
+
+```text
+PARTICIPANT
+COORDINATOR
+ADMIN
+SUPER_ADMIN
+````
+
+Never rely on frontend-only authorization.
+
+Every privileged operation must be validated on the backend.
+
+---
+
+# 2. CORE DESIGN PRINCIPLE
+
+This is NOT a generic quiz application.
+
+It is a controlled technical symposium competition system.
+
+The three rounds must work as a connected pipeline:
+
+```text
+                    TECHNOVA
+                       |
+          DECODE • DEBUG • DISCOVER
+                       |
+        +--------------+--------------+
+        |              |              |
+        v              v              v
+     ROUND 1        ROUND 2        ROUND 3
+   TECH QUIZ       DEBUG IT       TECH HUNT
+        |              |              |
+        v              v              v
+    TOP 30          TOP 10          WINNERS
+```
+
+Participants must not be able to access future rounds unless the backend explicitly qualifies and unlocks them.
+
+---
+
+# 3. PARTICIPANT FLOW
+
+The participant experience must be:
+
+```text
+Login
+  ↓
+Participant Dashboard
+  ↓
+Round 1
+  ↓
+Round 1 submission
+  ↓
+Waiting for qualification
+  ↓
+If qualified
+  ↓
+Round 2 unlocked
+  ↓
+Debugging
+  ↓
+Coordinator physical verification
+  ↓
+Round 2 completion
+  ↓
+Waiting for qualification
+  ↓
+If qualified
+  ↓
+Round 3 unlocked
+  ↓
+Technical Hunt
+  ↓
+Final completion
+```
+
+Do not allow participants to manually navigate to locked rounds.
+
+---
+
+# 4. PARTICIPANT REGISTRATION
+
+Create a participant database containing:
+
+```text
+participantId
+name
+email
+phone
+college
+department
+year
+registrationNumber
+password/authentication data
+status
+createdAt
+updatedAt
+```
+
+Generate a unique participant ID such as:
+
+```text
+TN2026-001
+TN2026-002
+TN2026-003
+```
+
+Participant IDs must be unique.
+
+Do not allow duplicate participant registration.
+
+---
+
+# 5. PARTICIPANT DASHBOARD
+
+Create a clean dashboard showing:
+
+```text
+TECHNOVA 2026
+
+Welcome, GODFREY
+
+Participant ID:
+TN2026-034
+
+Current Status:
+ROUND 2 — DEBUGGING
+
+Progress:
+
+✓ Round 1 — Completed
+● Round 2 — In Progress
+🔒 Round 3 — Locked
+```
+
+Also show:
+
+* Current round
+* Score
+* Qualification status
+* Time remaining
+* Verification status
+* Instructions
+* Event announcements
+
+Do not expose sensitive coordinator/admin information.
+
+---
+
+# 6. ROUND 1 — TECH QUIZ
+
+## Purpose
+
+Test broad Computer Science knowledge.
+
+## Number of questions
+
+Default:
+
+**20 questions**
+
+Make this configurable by ADMIN.
+
+Allow:
+
+```text
+minimum: 20
+maximum: 30
+```
+
+Recommended default:
+
+```text
+20 questions
+20 minutes
+```
+
+Each question receives a maximum of one minute by default.
+
+Make timing configurable.
+
+---
+
+# 7. ROUND 1 QUESTION DOMAINS
+
+The question bank must support categories such as:
+
+```text
+C
+C++
+Java
+Python
+Data Structures
+Algorithms
+DBMS
+SQL
+Operating Systems
+Computer Networks
+Web Technologies
+HTML
+CSS
+JavaScript
+React
+Cybersecurity
+Cloud Computing
+AI
+Machine Learning
+Generative AI
+Software Engineering
+Git/GitHub
+Computer Architecture
+General Computer Science
+```
+
+Admin must be able to create/edit/delete questions.
+
+Each question should contain:
+
+```text
+questionId
+questionText
+category
+difficulty
+options[]
+correctOption
+marks
+timeLimit
+explanation
+status
+createdAt
+updatedAt
+```
+
+---
+
+# 8. ROUND 1 QUESTION RANDOMIZATION
+
+Do not give every participant the exact same question order.
+
+Support:
+
+* Random question selection
+* Random question ordering
+* Random option ordering
+
+Example:
+
+Question bank:
+
+```text
+100 questions
+```
+
+Participant receives:
+
+```text
+20 questions
+```
+
+Participant A and Participant B may receive different question sequences.
+
+The selected questions must be stored for that participant so that the system can reconstruct exactly what they saw.
+
+Do not change their question set after the quiz begins.
+
+---
+
+# 9. ROUND 1 PARTICIPANT INTERFACE
+
+Create a professional quiz interface:
+
+```text
+------------------------------------------------
+TECHNOVA
+ROUND 1 — TECH QUIZ
+
+Participant: TN2026-034
+
+Question 7 / 20
+
+Time Remaining:
+13:42
+
+Which data structure follows LIFO?
+
+[ ] Queue
+[ ] Stack
+[ ] Tree
+[ ] Graph
+
+[ Previous ]                 [ Next ]
+
+Answered: 6 / 20
+------------------------------------------------
+```
+
+Features:
+
+* Question navigation
+* Current question indicator
+* Answer selection
+* Previous/next navigation if enabled by admin
+* Countdown timer
+* Auto-save answer
+* Auto-submit when time expires
+* Network reconnection handling
+* Prevent accidental page navigation where practical
+* Clear submission confirmation
+
+---
+
+# 10. ROUND 1 SCORING
+
+Primary ranking:
+
+```text
+Number of correct answers
+```
+
+Do NOT rank participants primarily by number of questions attempted.
+
+Example:
+
+```text
+Participant A: 19 correct
+Participant B: 18 correct
+```
+
+A ranks above B regardless of completion time.
+
+## Tie-breaking order
+
+Use:
+
+1. Higher correct-answer count
+2. Lower total completion time
+3. Additional administrator-created tie-breaker question
+4. Manual admin resolution only if necessary
+
+Do not use random ranking.
+
+---
+
+# 11. ROUND 1 TIMING
+
+Record:
+
+```text
+quizStartedAt
+quizSubmittedAt
+questionOpenedAt
+questionAnsweredAt
+questionTimeSpent
+```
+
+Every answer should have an audit record.
+
+Example:
+
+```text
+Participant:
+TN2026-034
+
+Question:
+Q17
+
+Opened:
+10:14:21
+
+Answered:
+10:14:48
+
+Time spent:
+27 seconds
+
+Answer:
+B
+
+Correct:
+true
+```
+
+---
+
+# 12. ROUND 1 ANTI-CHEATING MONITORING
+
+Implement monitoring signals, NOT fake AI cheating detection.
+
+Record events such as:
+
+```text
+TAB_BLUR
+TAB_FOCUS
+WINDOW_BLUR
+WINDOW_FOCUS
+FULLSCREEN_ENTER
+FULLSCREEN_EXIT
+PAGE_REFRESH
+NETWORK_DISCONNECT
+NETWORK_RECONNECT
+QUESTION_OPEN
+ANSWER_CHANGE
+ANSWER_SUBMIT
+QUIZ_START
+QUIZ_SUBMIT
+```
+
+If the browser supports it, request fullscreen mode.
+
+If fullscreen is exited:
+
+```text
+warningCount++
+```
+
+and record the event.
+
+Do NOT automatically declare that the participant cheated.
+
+The admin dashboard should show:
+
+```text
+TN2026-034
+
+Tab switches: 2
+Fullscreen exits: 1
+Reconnects: 0
+
+Status:
+FLAGGED FOR REVIEW
+```
+
+The system must clearly distinguish:
+
+```text
+MONITORING SIGNAL
+```
+
+from:
+
+```text
+PROVEN CHEATING
+```
+
+Never claim that the system can detect whether someone used ChatGPT, Google, another phone, or another device.
+
+---
+
+# 13. ROUND 1 LIVE ADMIN SCOREBOARD
+
+Create an admin-only live scoreboard.
+
+Example:
+
+```text
+ROUND 1 — LIVE SCOREBOARD
+
+Rank | Participant | Correct | Answered | Time | Flags
+---------------------------------------------------------
+1    | TN-034      | 19      | 20       | 08:43 | 0
+2    | TN-071      | 19      | 20       | 09:12 | 1
+3    | TN-012      | 18      | 20       | 08:31 | 0
+```
+
+Use Socket.IO for real-time updates.
+
+Participants should NOT see the complete live ranking during the active quiz unless the ADMIN explicitly enables it.
+
+---
+
+# 14. ROUND 1 ADMIN CONTROLS
+
+Admin must be able to:
+
+```text
+Create Round 1
+Configure question count
+Configure duration
+Select question categories
+Select difficulty distribution
+Preview questions
+Start Round
+Pause Round
+Resume Round
+End Round
+Force submit participant
+View live participants
+View scores
+View event logs
+Review monitoring flags
+Export results
+Qualify participants
+Unlock Round 2
+```
+
+---
+
+# 15. ROUND 1 QUALIFICATION
+
+Default:
+
+```text
+All participants
+        ↓
+Round 1
+        ↓
+Top 30
+        ↓
+Round 2
+```
+
+Do not hard-code 30.
+
+Admin must be able to configure:
+
+```text
+qualificationCount = 30
+```
+
+After Round 1 ends:
+
+```text
+CALCULATE RESULTS
+        ↓
+APPLY TIE-BREAK RULES
+        ↓
+ADMIN REVIEWS
+        ↓
+ADMIN CONFIRMS QUALIFIED PARTICIPANTS
+        ↓
+ROUND 2 UNLOCKED
+```
+
+---
+
+# 16. ROUND 2 — DEBUG IT
+
+This round is NOT an online code execution platform.
+
+This is extremely important.
+
+The participant receives broken code through the website.
+
+The participant copies the code.
+
+The participant works locally using:
+
+* VS Code
+* IntelliJ
+* terminal
+* local IDE
+* Google Colab
+* another permitted local environment
+
+The website DOES NOT execute participant-submitted code.
+
+Do not build arbitrary code execution on the server.
+
+---
+
+# 17. ROUND 2 STRUCTURE
+
+Default:
+
+```text
+3 debugging problems
+30 minutes
+10 marks each
+30 marks total
+```
+
+Recommended progression:
+
+```text
+Problem 1 → Syntax / compilation error
+Problem 2 → Logical error
+Problem 3 → Algorithmic/runtime error
+```
+
+The programming language can initially be Python for standardization.
+
+Make the language configurable for future events.
+
+---
+
+# 18. ROUND 2 PARTICIPANT INTERFACE
+
+Example:
+
+```text
+TECHNOVA
+ROUND 2 — DEBUG IT
+
+Problem 1
+
+Language:
+Python
+
+Difficulty:
+Easy
+
+The following program contains an error.
+
+-----------------------------------------
+def calculate(a, b):
+    result = a + b
+    print(result
+
+calculate(10, 20)
+-----------------------------------------
+
+[ COPY CODE ]
+
+Task:
+
+Identify the error.
+Correct the code.
+Run the corrected program locally.
+
+When your program works correctly,
+CALL THE COORDINATOR.
+
+Do NOT submit until the coordinator
+has physically verified your solution.
+```
+
+---
+
+# 19. ROUND 2 CORRECT SEQUENCE
+
+This sequence must be implemented exactly:
+
+```text
+1. Participant opens problem
+2. Participant copies broken code
+3. Participant works locally
+4. Participant debugs code
+5. Participant executes code locally
+6. Participant confirms expected output
+7. Participant calls coordinator
+8. Coordinator physically comes to participant
+9. Participant demonstrates the working code
+10. Coordinator checks:
+      - original problem
+      - corrected code
+      - execution
+      - output
+      - participant's actual work
+11. Coordinator confirms the solution
+12. Participant pastes corrected code into website
+13. Participant submits corrected code
+14. Coordinator opens verification control
+15. Coordinator authenticates
+16. Coordinator marks problem VERIFIED
+17. System awards marks
+18. Verification becomes locked
+19. Participant proceeds to next problem
+```
+
+The participant must NOT be able to award their own marks.
+
+---
+
+# 20. ROUND 2 SUBMISSION
+
+Provide a text editor:
+
+```text
+Corrected Code
+
+[ Large code textarea ]
+
+[ Submit Corrected Code ]
+```
+
+Optional:
+
+```text
+Observed Output
+
+[ Output textarea ]
+```
+
+When submitted:
+
+```text
+Status:
+SUBMITTED — WAITING FOR COORDINATOR VERIFICATION
+```
+
+Do NOT display:
+
+```text
+Correct
+```
+
+or:
+
+```text
+10 marks awarded
+```
+
+until coordinator verification occurs.
+
+---
+
+# 21. ROUND 2 COORDINATOR VERIFICATION
+
+The coordinator must physically verify the participant's local execution.
+
+The website is only the official record.
+
+Coordinator verification screen:
+
+```text
+PARTICIPANT:
+TN2026-034
+
+PROBLEM:
+1
+
+Participant submitted:
+[Corrected Code]
+
+Coordinator checklist:
+
+[ ] Code checked
+[ ] Error correction checked
+[ ] Local execution checked
+[ ] Expected output checked
+
+Coordinator Authorization:
+
+Coordinator ID
+[____________]
+
+Coordinator PIN
+[____________]
+
+[ VERIFY SOLUTION ]
+```
+
+All checklist items must be completed before verification.
+
+---
+
+# 22. COORDINATOR AUTHENTICATION
+
+Do NOT implement coordinator authentication using hidden HTML text, hidden buttons, CSS display:none, or client-side secrets.
+
+The coordinator interface may be unobtrusive, but security must be backend-enforced.
+
+Use:
+
+```text
+Coordinator account
++
+Coordinator ID
++
+secure authentication
+```
+
+The backend must check:
+
+```text
+authenticatedUser.role === COORDINATOR
+```
+
+or:
+
+```text
+authenticatedUser.role === ADMIN
+```
+
+before allowing verification.
+
+---
+
+# 23. ROUND 2 VERIFICATION RECORD
+
+When a coordinator verifies a solution, store:
+
+```text
+participantId
+round
+problemId
+submittedCode
+observedOutput
+verifiedBy
+verifiedAt
+marksAwarded
+verificationStatus
+```
+
+Example:
+
+```text
+Participant:
+TN2026-034
+
+Problem:
+DEBUG-01
+
+Status:
+VERIFIED
+
+Verified By:
+COORD-03
+
+Verified At:
+2026-09-22 11:42:18
+
+Marks:
+10/10
+```
+
+---
+
+# 24. ROUND 2 VERIFICATION MUST BE LOCKED
+
+Once:
+
+```text
+Problem 1 → VERIFIED
+```
+
+the coordinator cannot casually change it.
+
+Status:
+
+```text
+LOCKED
+```
+
+Only ADMIN or SUPER_ADMIN may override a verification.
+
+Every override must create an audit log.
+
+---
+
+# 25. ROUND 2 COORDINATOR DASHBOARD
+
+Create:
+
+```text
+ROUND 2 — VERIFICATION DASHBOARD
+
+Participant | P1 | P2 | P3 | Score | Status
+------------------------------------------------
+TN-001     | ✓  | ✓  | —  | 20    | Working
+TN-002     | ✓  | —  | —  | 10    | Working
+TN-003     | ✓  | ✓  | ✓  | 30    | Complete
+TN-004     | —  | —  | —  | 0     | Working
+```
+
+Status values:
+
+```text
+NOT_STARTED
+WORKING
+SUBMITTED
+WAITING_VERIFICATION
+VERIFIED
+LOCKED
+```
+
+Use real-time Socket.IO updates.
+
+---
+
+# 26. ROUND 2 QUALIFICATION
+
+Default:
+
+```text
+Top 10
+```
+
+Admin must be able to change the qualification count.
+
+Flow:
+
+```text
+30 participants
+      ↓
+Round 2
+      ↓
+Score / 30
+      ↓
+Top 10
+      ↓
+Admin confirms
+      ↓
+Round 3 unlocked
+```
+
+Tie-breaking:
+
+1. Higher Round 2 score
+2. Lower verified completion time
+3. Admin-created tie-breaker task
+
+---
+
+# 27. ROUND 3 — TECH HUNT
+
+Round 3 is a technical clue-based hunt.
+
+Default:
+
+```text
+5 clues
+5 stations
+10 finalists
+```
+
+The system controls the progression.
+
+---
+
+# 28. ROUND 3 FLOW
+
+```text
+CLUE 1
+   ↓
+Participant submits answer
+   ↓
+Correct?
+   ├── NO → Try again / optional hint
+   │
+   └── YES
+          ↓
+       Unlock Clue 2
+          ↓
+       Clue 3
+          ↓
+       Clue 4
+          ↓
+       Clue 5
+          ↓
+       FINISH
+```
+
+Do not allow participants to manually jump to Clue 5.
+
+---
+
+# 29. ROUND 3 CLUE TYPES
+
+Allow admins to create:
+
+```text
+Programming
+DBMS
+Operating Systems
+Networking
+Cybersecurity
+AI
+Web
+Data Structures
+Computer Science Logic
+Campus/location clues
+```
+
+Each clue should support:
+
+```text
+clueId
+title
+description
+answer
+station
+marks
+hint
+hintPenalty
+order
+active
+```
+
+---
+
+# 30. ROUND 3 STATION SYSTEM
+
+Example:
+
+```text
+Station 1
+Programming
+
+Station 2
+DBMS
+
+Station 3
+Networking
+
+Station 4
+Operating Systems
+
+Station 5
+AI
+```
+
+Participants can be assigned different starting stations to prevent them from simply following one another.
+
+Example:
+
+```text
+Participant A:
+1 → 2 → 3 → 4 → 5
+
+Participant B:
+3 → 4 → 5 → 1 → 2
+
+Participant C:
+2 → 3 → 4 → 5 → 1
+```
+
+The system should support configurable route sequences.
+
+---
+
+# 31. ROUND 3 PARTICIPANT SCREEN
+
+```text
+TECHNOVA
+ROUND 3 — TECH HUNT
+
+Station 3
+
+CLUE
+
+"I translate human-readable domain names
+into IP addresses."
+
+Your Answer:
+
+[________________________]
+
+[ SUBMIT ANSWER ]
+
+Progress:
+✓ Station 1
+✓ Station 2
+● Station 3
+🔒 Station 4
+🔒 Station 5
+```
+
+If correct:
+
+```text
+✓ CORRECT
+
+Proceed to Station 4.
+```
+
+---
+
+# 32. ROUND 3 SCORING
+
+Default:
+
+```text
+5 clues × 10 marks
+= 50 marks
+```
+
+Optional hint:
+
+```text
+Hint used:
+-2 marks
+```
+
+Make this configurable.
+
+Record:
+
+```text
+attemptCount
+submittedAnswer
+correct
+hintUsed
+time
+station
+completedAt
+```
+
+---
+
+# 33. ROUND 3 ADMIN MONITORING
+
+Admin dashboard:
+
+```text
+ROUND 3 — LIVE
+
+Participant | Station | Solved | Time | Status
+------------------------------------------------
+TN-003      | 4       | 3/5    | 14:21 | Active
+TN-007      | 2       | 1/5    | 07:32 | Active
+TN-011      | 5       | 5/5    | 18:04 | Complete
+```
+
+---
+
+# 34. FINAL RESULTS
+
+Final results should be based on the prescribed competition rules.
+
+Do NOT automatically combine scores from eliminated rounds unless ADMIN explicitly configures cumulative scoring.
+
+Recommended default:
+
+```text
+Round 1:
+Qualification only
+
+Round 2:
+Qualification only
+
+Round 3:
+Final ranking
+```
+
+Round 3 score:
+
+```text50 maximum
+```
+
+Tie-break:
+
+```textHigher score
+↓
+Lower completion time
+↓
+Additional tie-break challenge
+```
+
+Allow ADMIN to configure whether cumulative scoring is used.
+
+---
+
+# 35. ADMIN DASHBOARD
+
+Build a professional control center.
+
+Main navigation:
+
+```text
+Dashboard
+Participants
+Coordinators
+Question Bank
+Round 1
+Round 2
+Round 3
+Live Monitor
+Scoreboard
+Qualifications
+Audit Logs
+Announcements
+Settings
+Export
+```
+
+---
+
+# 36. ADMIN DASHBOARD OVERVIEW
+
+Show:
+
+```text
+Total Participants
+Active Participants
+Round 1 Completed
+Round 1 Qualified
+Round 2 Active
+Round 2 Verified
+Round 3 Finalists
+Event Status
+```
+
+Example:
+
+```text
+Participants:       87
+Round 1 Active:     87
+Round 1 Qualified:  30
+Round 2 Active:     30
+Round 2 Completed:  24
+Round 3 Finalists:  10
+```
+
+---
+
+# 37. EVENT STATE MACHINE
+
+Implement a proper event state system.
+
+Possible event states:
+
+```text
+REGISTRATION
+ROUND_1_READY
+ROUND_1_RUNNING
+ROUND_1_ENDED
+ROUND_1_REVIEW
+ROUND_2_READY
+ROUND_2_RUNNING
+ROUND_2_REVIEW
+ROUND_3_READY
+ROUND_3_RUNNING
+EVENT_COMPLETED
+```
+
+The backend must enforce valid transitions.
+
+Example:
+
+```text
+ROUND_1_RUNNING
+```
+
+cannot directly become:
+
+```text
+ROUND_3_RUNNING
+```
+
+without qualification and admin confirmation.
+
+---
+
+# 38. AUDIT LOGGING
+
+Every sensitive operation should be logged.
+
+Examples:
+
+```text
+LOGIN
+LOGOUT
+ROUND_STARTED
+ROUND_ENDED
+ANSWER_SUBMITTED
+ANSWER_CHANGED
+TAB_BLUR
+TAB_FOCUS
+FULLSCREEN_EXIT
+PARTICIPANT_QUALIFIED
+COORDINATOR_VERIFIED
+SCORE_AWARDED
+SCORE_OVERRIDDEN
+CLUE_SOLVED
+HINT_USED
+ADMIN_OVERRIDE
+```
+
+Store:
+
+```text
+userId
+role
+action
+target
+timestamp
+metadata
+IP where appropriate
+```
+
+Do not collect unnecessary personal information.
+
+---
+
+# 39. SECURITY REQUIREMENTS
+
+Implement:
+
+* Password hashing
+* JWT authentication
+* Role-based authorization
+* Server-side validation
+* Rate limiting
+* Input sanitization
+* MongoDB query validation
+* Secure HTTP headers
+* CORS configuration
+* Environment variables
+* No secrets in frontend source
+* No coordinator credentials in frontend JavaScript
+* No answer keys exposed to participants
+* No correct answers sent to participant browser unnecessarily
+* No client-side score authority
+* No client-side qualification authority
+
+Never trust:
+
+```text
+participantScore
+participantRole
+qualificationStatus
+verificationStatus
+```
+
+from the frontend.
+
+All authoritative values must be determined by the backend.
+
+---
+
+# 40. ANTI-CHEATING DESIGN
+
+Use reasonable technical controls:
+
+* Randomized question order
+* Randomized option order
+* Per-question timestamps
+* Fullscreen monitoring
+* Tab/window visibility logging
+* Network disconnect logging
+* Question/answer audit trail
+* Server-authoritative timer
+* One active session per participant
+* Coordinator observation for Round 2
+* Physical station control for Round 3
+
+Do NOT implement fake claims such as:
+
+"AI detects ChatGPT usage."
+
+The system may only record observable events.
+
+---
+
+# 41. TIMER ARCHITECTURE
+
+Timers must be server-authoritative.
+
+Do NOT rely only on:
+
+```javascript
+setInterval()
+```
+
+on the browser.
+
+Store:
+
+```text
+roundStartedAt
+roundEndsAt
+participantStartedAt
+participantEndsAt
+```
+
+The frontend should calculate/display remaining time, but the backend determines whether an action is still valid.
+
+Handle:
+
+* Refresh
+* Reconnect
+* Multiple tabs
+* Temporary network loss
+* Browser crash
+
+---
+
+# 42. MULTIPLE DEVICE / SESSION CONTROL
+
+Prevent one participant account from being used simultaneously on multiple active sessions where practical.
+
+When a participant logs in:
+
+```text
+sessionId
+device/session timestamp
+```
+
+If another login occurs:
+
+```text
+Existing active session detected.
+```
+
+Allow ADMIN to force logout if required.
+
+---
+
+# 43. OFFLINE / NETWORK FAILURE HANDLING
+
+For Round 1:
+
+* Auto-save answers
+* Retry failed API calls
+* Maintain local temporary state
+* Synchronize when connection returns
+* Never extend server-authoritative time because of a frontend timer bug
+* Show clear connection status
+
+Example:
+
+```text
+● Connected
+
+or
+
+⚠ Connection interrupted
+Your answers are being synchronized...
+```
+
+---
+
+# 44. QUESTION BANK ADMIN UI
+
+Admin can:
+
+```text
+Create
+Edit
+Delete
+Duplicate
+Import
+Export
+Search
+Filter
+Preview
+Activate
+Deactivate
+```
+
+Filters:
+
+```text
+Category
+Difficulty
+Language
+Round
+Status
+```
+
+Support bulk import through JSON/CSV if practical.
+
+---
+
+# 45. COORDINATOR MANAGEMENT
+
+Admin can create coordinator accounts:
+
+```text
+Coordinator ID
+Name
+Email
+Password
+Assigned Round
+Assigned Station
+Status
+```
+
+Example:
+
+```text
+COORD-01
+Round 2
+Active
+
+COORD-02
+Round 2
+Active
+
+COORD-03
+Round 3
+Station 3
+Active
+```
+
+Coordinators should only access the functions they need.
+
+---
+
+# 46. ROLE PERMISSIONS
+
+## PARTICIPANT
+
+Can:
+
+* View own profile
+* Participate in unlocked round
+* Submit answers
+* Submit corrected code
+* View own status
+* View own score when permitted
+
+Cannot:
+
+* Access admin dashboard
+* Verify themselves
+* Modify scores
+* Access answer keys
+* Access other participants
+
+## COORDINATOR
+
+Can:
+
+* View assigned participants
+* Verify Round 2 solutions
+* Award configured marks
+* Manage assigned stations
+* View assigned round data
+
+Cannot:
+
+* Change global event settings
+* Modify question answers
+* Change qualification rules
+* Delete participants
+* Override admin decisions
+
+## ADMIN
+
+Can manage the entire event.
+
+## SUPER_ADMIN
+
+Can manage admins and perform emergency overrides.
+
+---
+
+# 47. UI/UX DIRECTION
+
+The system should feel like a **professional technical competition platform**, not a generic college form.
+
+Design language:
+
+* Modern
+* Technical
+* Clean
+* High contrast
+* Responsive
+* Fast
+* Minimal unnecessary decoration
+* Excellent typography
+* Clear status indicators
+* Strong visual hierarchy
+
+Use subtle technical visual elements:
+
+* Grid
+* Terminal-inspired components
+* Code panels
+* Progress indicators
+* Status badges
+* Live counters
+
+Do NOT overuse neon effects or excessive animations.
+
+---
+
+# 48. RESPONSIVE DESIGN
+
+Participant portal must work on:
+
+* Desktop
+* Laptop
+* Tablet
+* Mobile
+
+However, Round 1 should display a warning recommending a larger screen if the event organizers require it.
+
+Admin dashboard should primarily target desktop/tablet.
+
+---
+
+# 49. ACCESSIBILITY
+
+Implement:
+
+* Keyboard navigation
+* Proper labels
+* Sufficient contrast
+* Focus states
+* Accessible buttons
+* Screen-reader-friendly structure
+* Error messages
+* Do not rely only on color for status
+
+---
+
+# 50. DATABASE MODELS
+
+At minimum create:
+
+```text
+User
+Participant
+Coordinator
+Event
+Round
+Question
+QuizAttempt
+QuizAnswer
+DebugProblem
+DebugSubmission
+DebugVerification
+TechClue
+ClueAttempt
+Qualification
+AuditLog
+Announcement
+Session
+```
+
+Normalize relationships where practical.
+
+---
+
+# 51. API DESIGN
+
+Create clean REST APIs.
+
+Example:
+
+```text
+POST   /api/auth/login
+POST   /api/auth/logout
+GET    /api/me
+
+GET    /api/event
+GET    /api/event/status
+
+GET    /api/rounds
+GET    /api/rounds/:roundId
+
+POST   /api/quiz/start
+GET    /api/quiz/current
+POST   /api/quiz/answer
+POST   /api/quiz/submit
+
+GET    /api/admin/quiz/results
+GET    /api/admin/quiz/live
+
+GET    /api/debug/problems
+POST   /api/debug/:problemId/submit
+GET    /api/debug/status
+
+POST   /api/coordinator/debug/:submissionId/verify
+
+GET    /api/hunt/current
+POST   /api/hunt/:clueId/answer
+
+GET    /api/admin/participants
+POST   /api/admin/qualifications
+POST   /api/admin/rounds/start
+POST   /api/admin/rounds/end
+
+GET    /api/admin/audit-logs
+```
+
+Adapt the exact API structure to the implementation.
+
+---
+
+# 52. REAL-TIME EVENTS
+
+Use Socket.IO for:
+
+```text
+scoreboard:update
+participant:status
+round:started
+round:ended
+verification:updated
+clue:solved
+participant:qualified
+announcement:new
+```
+
+Do not use Socket.IO for data that does not require real-time communication.
+
+---
+
+# 53. ERROR HANDLING
+
+Every API must return structured errors.
+
+Example:
+
+```json
+{
+  "success": false,
+  "message": "Round 2 is not currently available.",
+  "code": "ROUND_LOCKED"
+}
+```
+
+Frontend should display useful user-friendly messages.
+
+Never expose stack traces or internal database errors to participants.
+
+---
+
+# 54. PROJECT STRUCTURE
+
+Use a clean structure such as:
+
+```text
+technova/
+│
+├── client/
+│   ├── src/
+│   │   ├── components/
+│   │   ├── layouts/
+│   │   ├── pages/
+│   │   │   ├── auth/
+│   │   │   ├── participant/
+│   │   │   ├── coordinator/
+│   │   │   └── admin/
+│   │   ├── rounds/
+│   │   │   ├── round1/
+│   │   │   ├── round2/
+│   │   │   └── round3/
+│   │   ├── hooks/
+│   │   ├── services/
+│   │   ├── context/
+│   │   ├── utils/
+│   │   ├── routes/
+│   │   └── App.jsx
+│   │
+│   └── package.json
+│
+├── server/
+│   ├── src/
+│   │   ├── controllers/
+│   │   ├── models/
+│   │   ├── routes/
+│   │   ├── middleware/
+│   │   ├── services/
+│   │   ├── sockets/
+│   │   ├── utils/
+│   │   ├── config/
+│   │   └── server.js
+│   │
+│   └── package.json
+│
+├── README.md
+├── .env.example
+└── package.json
+```
+
+---
+
+# 55. DEMO DATA
+
+Create seed data for development.
+
+Create:
+
+```text
+1 admin
+5 coordinators
+20 sample participants
+30+ quiz questions
+3 debug problems
+5 technical clues
+```
+
+Do NOT use real participant personal data in seed data.
+
+---
+
+# 56. TESTING REQUIREMENTS
+
+Test:
+
+### Authentication
+
+* Participant login
+* Coordinator login
+* Admin login
+* Invalid credentials
+* Role restrictions
+
+### Round 1
+
+* Timer
+* Answer saving
+* Question randomization
+* Option randomization
+* Submission
+* Score calculation
+* Tie-breaking
+* Refresh
+* Network reconnect
+* Multiple session prevention
+
+### Round 2
+
+* Problem access
+* Code submission
+* Coordinator verification
+* Coordinator authorization
+* Score awarding
+* Verification locking
+* Admin override
+
+### Round 3
+
+* Clue progression
+* Wrong answer
+* Correct answer
+* Hint
+* Station routing
+* Completion
+* Timing
+
+### Admin
+
+* Participant management
+* Question management
+* Round controls
+* Qualification
+* Scoreboard
+* Audit logs
+
+---
+
+# 57. IMPORTANT IMPLEMENTATION RULE
+
+Do not build the entire system as a static frontend mockup.
+
+The system must have:
+
+```text
+Real database
+Real authentication
+Real backend authorization
+Real scoring
+Real timers
+Real participant state
+Real coordinator verification
+Real audit logs
+Real round progression
+```
+
+Avoid hard-coded scores and qualification decisions.
+
+---
+
+# 58. DEVELOPMENT STRATEGY
+
+Build incrementally.
+
+## Phase 1
+
+Authentication + database + roles.
+
+## Phase 2
+
+Participant dashboard + event state.
+
+## Phase 3
+
+Round 1 complete implementation.
+
+## Phase 4
+
+Round 1 admin scoreboard + qualification.
+
+## Phase 5
+
+Round 2 debugging + coordinator verification.
+
+## Phase 6
+
+Round 3 technical hunt.
+
+## Phase 7
+
+Real-time functionality.
+
+## Phase 8
+
+Audit logs + anti-cheating signals.
+
+## Phase 9
+
+Testing + security hardening.
+
+## Phase 10
+
+Production deployment.
+
+Do not skip directly to styling before the core event state and authorization system works.
+
+---
+
+# 59. FINAL ACCEPTANCE CRITERIA
+
+The system is considered complete only when the following complete scenario works:
+
+```text
+100 participants register
+        ↓
+Admin starts Round 1
+        ↓
+Participants receive randomized 20-question quiz
+        ↓
+Answers are saved
+        ↓
+Timer expires / participant submits
+        ↓
+Backend calculates scores
+        ↓
+Admin reviews results
+        ↓
+Top 30 are qualified
+        ↓
+Admin unlocks Round 2
+        ↓
+30 participants access 3 debugging problems
+        ↓
+Participants copy code
+        ↓
+Participants debug locally
+        ↓
+Participants call coordinators
+        ↓
+Coordinators physically verify execution
+        ↓
+Participants submit corrected code
+        ↓
+Coordinator authenticates
+        ↓
+Problem becomes VERIFIED
+        ↓
+Score is awarded
+        ↓
+Top 10 are qualified
+        ↓
+Admin unlocks Round 3
+        ↓
+10 participants solve 5 technical clues
+        ↓
+System tracks progression
+        ↓
+Final scores calculated
+        ↓
+Admin confirms results
+        ↓
+Final leaderboard generated
+        ↓
+Event completed
+```
+the registrration count can be varies..so give admin to change count
+
+---
+
+# 60. FINAL REQUIREMENT
+
+Before writing implementation code:
+
+1. No mock data should be created.
+2. Analyze the entire specification above.
+3. Identify missing dependencies and architectural issues.
+4. Create the database schema.
+5. Create the API contract.
+6. Create the frontend route map.
+6. Create the role/permission matrix.
+7. Create the round state machine.
+8. Create the folder structure.
+9. Then implement the application incrementally.
+10. Database as mongodb clould atlas uri
+
+Do not generate fake functionality just to make the UI appear complete.
+
+If a feature is not implemented, clearly mark it as TODO rather than pretending it works.
+
+The final application must be a cohesive, production-oriented **TECHNOVA Symposium Competition Management System** for:
+
+**ROUND 1 — KNOWLEDGE**
+
+**ROUND 2 — DEBUGGING**
+
+**ROUND 3 — PROBLEM SOLVING**
+
+with strong event control, participant tracking, coordinator verification, scoring, timing, and auditability.
+
+```
+```

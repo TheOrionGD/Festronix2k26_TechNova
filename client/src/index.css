@@ -1,0 +1,103 @@
+@import "tailwindcss";
+
+@theme {
+  --color-technova-gray: #595959;
+  --color-technova-offwhite: #EFEEEA;
+  --color-technova-red: #D60303;
+  --color-technova-muted-red: #C23D31;
+  --color-technova-deep-red: #A30B1A;
+
+  --color-technova-neutral: #595959;
+  --color-technova-surface: #EFEEEA;
+  --color-technova-primary: #D60303;
+  --color-technova-secondary: #C23D31;
+  --color-technova-deep: #A30B1A;
+}
+
+:root {
+  --technova-gray: #595959;
+  --technova-offwhite: #EFEEEA;
+  --technova-red: #D60303;
+  --technova-muted-red: #C23D31;
+  --technova-deep-red: #A30B1A;
+
+  --technova-neutral: #595959;
+  --technova-surface: #EFEEEA;
+  --technova-primary: #D60303;
+  --technova-secondary: #C23D31;
+  --technova-deep: #A30B1A;
+}
+
+@layer base {
+  body {
+    background-color: #EFEEEA;
+    color: #595959;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    overflow-x: hidden;
+  }
+}
+
+/* Custom Utilities based on approved palette */
+.glass-panel {
+  background: #EFEEEA;
+  border: 1px solid #595959;
+}
+
+.glass-card {
+  background: #EFEEEA;
+  border: 1px solid #595959;
+  box-shadow: 0 4px 16px 0 rgba(89, 89, 89, 0.1);
+}
+
+.glass-card:hover {
+  border-color: #C23D31;
+  box-shadow: 0 6px 20px 0 rgba(194, 61, 49, 0.15);
+}
+
+.glow-red {
+  box-shadow: 0 0 20px rgba(214, 3, 3, 0.3);
+}
+
+.glow-deep-red {
+  box-shadow: 0 0 20px rgba(163, 11, 26, 0.4);
+}
+
+.text-gradient {
+  background: linear-gradient(135deg, #A30B1A 0%, #D60303 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.text-gradient-red {
+  background: linear-gradient(135deg, #D60303 0%, #C23D31 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #EFEEEA;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #595959;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #A30B1A;
+}
+
+@keyframes pulseGlow {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.9; }
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 3s infinite ease-in-out;
+}

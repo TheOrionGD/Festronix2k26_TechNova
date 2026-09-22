@@ -1,0 +1,180 @@
+import mongoose from 'mongoose';
+
+// User Schema
+const userSchema = new mongoose.Schema({
+  id: { type: String, required: true, unique: true },
+  name: { type: String, required: true },
+  email: { type: String, required: true },
+  college: { type: String, default: '' },
+  department: { type: String, default: '' },
+  year: { type: String, default: '' },
+  role: { type: String, enum: ['PARTICIPANT', 'COORDINATOR', 'ADMIN'], default: 'PARTICIPANT' },
+  password: { type: String, required: true },
+  assignedRound: { type: String, default: '' },
+  pin: { type: String, default: '' },
+  permissions: [{ type: String }] // e.g. MANAGE_QUESTIONS, MANAGE_DEBUG_PROBLEMS, MANAGE_CLUES
+}, { timestamps: true });
+
+// EventState Schema
+const eventStateSchema = new mongoose.Schema({
+  status: { type: String, default: 'REGISTRATION' }, // REGISTRATION | ROUND_1_READY | ROUND_1_RUNNING | ROUND_1_ENDED | ROUND_2_READY | ROUND_2_RUNNING | ROUND_2_ENDED | ROUND_3_READY | ROUND_3_RUNNING | COMPLETED
+  round1MaxQuestions: { type: Number, default: 20 },
+  round1DurationMinutes: { type: Number, default: 20 },
+  round1QualifyCount: { type: Number, default: 30 },
+  round2QualifyCount: { type: Number, default: 10 },
+  round3StationCount: { type: Number, default: 5 },
+  registrationCount: { type: Number, default: 0 },
+  activeRound: { type: Number, default: 1 }
+}, { timestamps: true });
+
+// Question Schema (Round 1 MCQ)
+const questionSchema = new mongoose.Schema({
+  questionId: { type: String, required: true, unique: true },
+  id: { type: String }, // Alias for backwards compatibility
+  questionText: { type: String, required: true },
+  category: { type: String, required: true },
+  difficulty: { type: String, enum: ['EASY', 'MEDIUM', 'HARD'], default: 'MEDIUM' },
+  options: [{ type: String, required: true }],
+  correctOption: { type: Number, required: true }, // Backend-only! 0-indexed
+  marks: { type: Number, default: 1 },
+  explanation: { type: String, default: '' },
+  tags: [{ type: String }],
+  status: { type: String, enum: ['DRAFT', 'ACTIVE', 'INACTIVE', 'ARCHIVED'], default: 'ACTIVE' },
+  createdBy: { type: String, default: 'SYSTEM' },
+  updatedBy: { type: String, default: 'SYSTEM' }
+}, { timestamps: true });
+
+// QuizAttempt Schema (Persisted Round 1 Attempt per Participant)
+const quizAttemptSchema = new mongoose.Schema({
+  attemptId: { type: String, required: true, unique: true },
+  participantId: { type: String, required: true },
+  roundId: { type: String, default: 'ROUND_1' },
+  selectedQuestions: [{
+    questionId: { type: String, required: true },
+    position: { type: Number, required: true },
+    options: [{ type: String }], // Option order randomized for this specific participant attempt
+    correctOptionIndex: { type: Number } // Mapped correct index for backend validation
+  }],
+  userAnswers: { type: Map, of: Number, default: {} }, // questionId -> selectedOptionIndex
+  startedAt: { type: Date, default: Date.now },
+  endsAt: { type: Date },
+  submittedAt: { type: Date, default: null },
+  status: { type: String, enum: ['ACTIVE', 'SUBMITTED', 'EXPIRED'], default: 'ACTIVE' },
+  score: { type: Number, default: 0 }
+}, { timestamps: true });
+
+// DebugProblem Schema (Round 2)
+const debugProblemSchema = new mongoose.Schema({
+  problemId: { type: Number, required: true, unique: true },
+  id: { type: Number }, // Alias
+  title: { type: String, required: true },
+  description: { type: String, required: true },
+  language: { type: String, default: 'Python' },
+  difficulty: { type: String, enum: ['EASY', 'MEDIUM', 'HARD'], default: 'MEDIUM' },
+  brokenCode: { type: String, required: true },
+  expectedOutput: { type: String, required: true },
+  solutionSnippet: { type: String, default: '' }, // Coordinator-only
+  marks: { type: Number, default: 10 },
+  category: { type: String, default: 'Logic' },
+  tags: [{ type: String }],
+  status: { type: String, enum: ['DRAFT', 'ACTIVE', 'INACTIVE', 'ARCHIVED'], default: 'ACTIVE' },
+  createdBy: { type: String, default: 'SYSTEM' },
+  updatedBy: { type: String, default: 'SYSTEM' }
+}, { timestamps: true });
+
+// DebugAttempt Schema (Persisted Round 2 Attempt per Participant)
+const debugAttemptSchema = new mongoose.Schema({
+  attemptId: { type: String, required: true, unique: true },
+  participantId: { type: String, required: true },
+  roundId: { type: String, default: 'ROUND_2' },
+  selectedProblemIds: [{ type: Number }],
+  startedAt: { type: Date, default: Date.now },
+  endsAt: { type: Date },
+  status: { type: String, enum: ['ACTIVE', 'COMPLETED'], default: 'ACTIVE' }
+}, { timestamps: true });
+
+// TechClue Schema (Round 3)
+const techClueSchema = new mongoose.Schema({
+  clueId: { type: Number, required: true, unique: true },
+  id: { type: Number }, // Alias
+  station: { type: Number, required: true },
+  category: { type: String, required: true },
+  title: { type: String, required: true },
+  clueText: { type: String, required: true },
+  answer: { type: String, required: true }, // Backend-only!
+  hint: { type: String, default: '' },
+  hintPenalty: { type: Number, default: 2 },
+  marks: { type: Number, default: 10 },
+  order: { type: Number, default: 1 },
+  status: { type: String, enum: ['DRAFT', 'ACTIVE', 'INACTIVE', 'ARCHIVED'], default: 'ACTIVE' },
+  createdBy: { type: String, default: 'SYSTEM' },
+  updatedBy: { type: String, default: 'SYSTEM' }
+}, { timestamps: true });
+
+// HuntAttempt Schema (Persisted Round 3 Attempt per Participant)
+const huntAttemptSchema = new mongoose.Schema({
+  attemptId: { type: String, required: true, unique: true },
+  participantId: { type: String, required: true },
+  roundId: { type: String, default: 'ROUND_3' },
+  selectedClueIds: [{ type: Number }],
+  currentClueIndex: { type: Number, default: 0 },
+  solvedClueIds: [{ type: Number }],
+  hintsUsed: { type: Map, of: Boolean, default: {} },
+  answers: { type: Map, of: String, default: {} },
+  score: { type: Number, default: 0 },
+  startedAt: { type: Date, default: Date.now },
+  endsAt: { type: Date },
+  status: { type: String, enum: ['ACTIVE', 'COMPLETED'], default: 'ACTIVE' }
+}, { timestamps: true });
+
+// Submission / Verification Schema (Round 2 Physical Verification)
+const submissionSchema = new mongoose.Schema({
+  participantId: { type: String, required: true },
+  problemId: { type: Number, required: true },
+  code: { type: String, default: '' },
+  output: { type: String, default: '' },
+  status: { type: String, enum: ['NOT_STARTED', 'WORKING', 'SUBMITTED', 'WAITING_VERIFICATION', 'VERIFIED', 'LOCKED'], default: 'NOT_STARTED' },
+  verifiedBy: { type: String, default: null },
+  marks: { type: Number, default: 0 },
+  verifiedAt: { type: Date, default: null }
+}, { timestamps: true });
+
+// Announcement Schema
+const announcementSchema = new mongoose.Schema({
+  id: { type: Number, required: true },
+  title: { type: String, required: true },
+  message: { type: String, required: true },
+  time: { type: String, default: 'Just now' },
+  tag: { type: String, default: 'General' }
+}, { timestamps: true });
+
+// AntiCheatLog Schema
+const antiCheatLogSchema = new mongoose.Schema({
+  id: { type: Number, required: true },
+  participantId: { type: String, required: true },
+  type: { type: String, required: true },
+  message: { type: String, required: true },
+  timestamp: { type: String, required: true }
+}, { timestamps: true });
+
+// AuditLog Schema
+const auditLogSchema = new mongoose.Schema({
+  userId: { type: String, required: true },
+  role: { type: String, required: true },
+  action: { type: String, required: true }, // e.g. QUESTION_CREATED, QUESTION_SET_GENERATED
+  targetId: { type: String, default: '' },
+  metadata: { type: mongoose.Schema.Types.Mixed, default: {} }
+}, { timestamps: true });
+
+export const User = mongoose.model('User', userSchema);
+export const EventState = mongoose.model('EventState', eventStateSchema);
+export const Question = mongoose.model('Question', questionSchema);
+export const QuizAttempt = mongoose.model('QuizAttempt', quizAttemptSchema);
+export const DebugProblem = mongoose.model('DebugProblem', debugProblemSchema);
+export const DebugAttempt = mongoose.model('DebugAttempt', debugAttemptSchema);
+export const TechClue = mongoose.model('TechClue', techClueSchema);
+export const HuntAttempt = mongoose.model('HuntAttempt', huntAttemptSchema);
+export const Submission = mongoose.model('Submission', submissionSchema);
+export const Announcement = mongoose.model('Announcement', announcementSchema);
+export const AntiCheatLog = mongoose.model('AntiCheatLog', antiCheatLogSchema);
+export const AuditLog = mongoose.model('AuditLog', auditLogSchema);
