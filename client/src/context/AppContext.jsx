@@ -37,6 +37,48 @@ export const AppProvider = ({ children }) => {
   const [antiCheatFlags, setAntiCheatFlags] = useState([]);
   const [warningCount, setWarningCount] = useState(0);
 
+  // Network Offline & 5-Second Heartbeat Synchronization
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  const [showOfflineToast, setShowOfflineToast] = useState(false);
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOffline(false);
+      setShowOfflineToast(false);
+      fetchEventState();
+      fetchLeaderboard();
+    };
+
+    const handleOffline = () => {
+      setIsOffline(true);
+      setShowOfflineToast(true);
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    const heartbeat = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_BASE}/event/status`, { cache: 'no-store' });
+        if (res.ok && isOffline) {
+          setIsOffline(false);
+          setShowOfflineToast(false);
+        }
+      } catch (err) {
+        if (!isOffline) {
+          setIsOffline(true);
+          setShowOfflineToast(true);
+        }
+      }
+    }, 5000);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      clearInterval(heartbeat);
+    };
+  }, [isOffline]);
+
   // Coordinator Verification Modal State
   const [pendingVerificationProblemId, setPendingVerificationProblemId] = useState(null);
   const [isCoordinatorModalOpen, setIsCoordinatorModalOpen] = useState(false);
@@ -150,9 +192,9 @@ export const AppProvider = ({ children }) => {
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [currentUser, currentScreen]);
 
-  // Authentication via Backend API
+  // Authentication via Backend API (User ID + Password -> Token + Role)
   const loginUser = async (credentials) => {
-    // credentials: { id, password, role, pin, email }
+    // credentials: { id, password }
     try {
       const res = await fetch(`${API_BASE}/auth/login`, {
         method: 'POST',
@@ -162,7 +204,12 @@ export const AppProvider = ({ children }) => {
       const data = await res.json();
 
       if (data.success && data.user) {
+        if (data.token) {
+          localStorage.setItem('technova_token', data.token);
+        }
         setCurrentUser(data.user);
+
+        // Auto-redirect to dashboard matching trusted backend user role
         if (data.user.role === 'ADMIN') {
           setCurrentScreen('admin');
         } else if (data.user.role === 'COORDINATOR') {
@@ -170,9 +217,9 @@ export const AppProvider = ({ children }) => {
         } else {
           setCurrentScreen('dashboard');
         }
-        return { success: true };
+        return { success: true, role: data.user.role };
       } else {
-        return { success: false, message: data.message || 'Login failed.' };
+        return { success: false, message: data.message || 'Invalid credentials.' };
       }
     } catch (err) {
       return { success: false, message: 'Server unavailable. Please try again.' };
@@ -180,6 +227,7 @@ export const AppProvider = ({ children }) => {
   };
 
   const logoutUser = () => {
+    localStorage.removeItem('technova_token');
     setCurrentUser(null);
     setCurrentScreen('landing');
   };
@@ -302,10 +350,36 @@ export const AppProvider = ({ children }) => {
     } catch (err) {}
   };
 
+  const requestFullScreen = async () => {
+    try {
+      const docEl = document.documentElement;
+      if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+        if (docEl.requestFullscreen) {
+          await docEl.requestFullscreen();
+        } else if (docEl.webkitRequestFullscreen) {
+          await docEl.webkitRequestFullscreen();
+        } else if (docEl.msRequestFullscreen) {
+          await docEl.msRequestFullscreen();
+        }
+      }
+      return true;
+    } catch (err) {
+      console.warn('Fullscreen request blocked or denied:', err?.message);
+      return false;
+    }
+  };
+
+  const navigateToRound = async (roundScreen) => {
+    await requestFullScreen();
+    setCurrentScreen(roundScreen);
+  };
+
   return (
     <AppContext.Provider value={{
       currentScreen,
       setCurrentScreen,
+      navigateToRound,
+      requestFullScreen,
       currentUser,
       loginUser,
       logoutUser,
@@ -333,9 +407,27 @@ export const AppProvider = ({ children }) => {
       fetchAnnouncements,
       fetchQuestions,
       fetchDebugProblems,
-      fetchTechClues
+      fetchTechClues,
+      isOffline,
+      showOfflineToast,
+      setShowOfflineToast
     }}>
       {children}
+
+      {/* BOTTOM-LEFT SYSTEM OFFLINE NOTIFICATION TOAST */}
+      {showOfflineToast && (
+        <div className="fixed bottom-5 left-5 z-50 bg-zinc-900/95 backdrop-blur-md border border-red-600/80 rounded-2xl p-4 shadow-2xl max-w-sm flex items-center gap-3.5 text-white animate-slide-up select-none">
+          <div className="w-10 h-10 rounded-xl bg-red-600/20 p-1 shrink-0 border border-red-500/40 flex items-center justify-center overflow-hidden">
+            <img src="/technova_icon.jpg" alt="Technova Favicon" className="w-full h-full object-cover rounded-lg" />
+          </div>
+          <div className="text-left text-xs font-mono leading-tight space-y-1">
+            <span className="font-bold text-red-500 block uppercase tracking-wider">SYSTEM OFFLINE</span>
+            <p className="text-zinc-300 font-sans text-[11px] leading-relaxed">
+              Your system gone to offline, no need to worry. The system now goes for offline first synchronization phase.
+            </p>
+          </div>
+        </div>
+      )}
     </AppContext.Provider>
   );
 };

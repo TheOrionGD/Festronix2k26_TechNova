@@ -104,9 +104,9 @@ export default function AdminPortal() {
       <div className="flex flex-1">
         <Sidebar />
 
-        <main className="flex-1 p-6 overflow-y-auto max-w-7xl mx-auto space-y-6">
+        <main className="flex-1 p-6 overflow-y-auto max-w-7xl mx-auto space-y-6 animate-hero-entrance">
           {/* Top Banner */}
-          <div className="bg-[#EFEEEA] p-6 rounded-2xl border border-[#595959] shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="bg-[#EFEEEA] p-6 rounded-2xl border border-[#595959] shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4 card-hover-lift">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-xl bg-[#D60303]/10 text-[#D60303] flex items-center justify-center font-bold">
                 <ShieldCheck className="w-7 h-7" />
@@ -119,7 +119,7 @@ export default function AdminPortal() {
             </div>
 
             <div className="flex items-center gap-2 font-mono text-xs">
-              <span className="px-3 py-1 rounded-full bg-[#A30B1A] text-[#EFEEEA] font-bold">
+              <span className="px-3 py-1 rounded-full bg-[#A30B1A] text-[#EFEEEA] font-bold shadow-2xs">
                 STATE: {eventState.status}
               </span>
             </div>
@@ -129,7 +129,7 @@ export default function AdminPortal() {
           <div className="flex items-center gap-2 border-b border-[#595959]/20 pb-2 text-xs font-bold">
             <button
               onClick={() => setActiveTab('overview')}
-              className={`px-4 py-2 rounded-xl transition flex items-center gap-2 cursor-pointer ${
+              className={`px-4 py-2 rounded-xl transition-all duration-200 flex items-center gap-2 cursor-pointer btn-interactive ${
                 activeTab === 'overview' ? 'bg-[#D60303] text-[#EFEEEA] shadow-xs' : 'bg-[#EFEEEA] border border-[#595959] text-[#595959] hover:bg-[#595959]/10'
               }`}
             >
@@ -139,7 +139,7 @@ export default function AdminPortal() {
 
             <button
               onClick={() => setActiveTab('qualifications')}
-              className={`px-4 py-2 rounded-xl transition flex items-center gap-2 cursor-pointer ${
+              className={`px-4 py-2 rounded-xl transition-all duration-200 flex items-center gap-2 cursor-pointer btn-interactive ${
                 activeTab === 'qualifications' ? 'bg-[#D60303] text-[#EFEEEA] shadow-xs' : 'bg-[#EFEEEA] border border-[#595959] text-[#595959] hover:bg-[#595959]/10'
               }`}
             >
@@ -149,7 +149,7 @@ export default function AdminPortal() {
 
             <button
               onClick={() => setActiveTab('questions')}
-              className={`px-4 py-2 rounded-xl transition flex items-center gap-2 cursor-pointer ${
+              className={`px-4 py-2 rounded-xl transition-all duration-200 flex items-center gap-2 cursor-pointer btn-interactive ${
                 activeTab === 'questions' ? 'bg-[#D60303] text-[#EFEEEA] shadow-xs' : 'bg-[#EFEEEA] border border-[#595959] text-[#595959] hover:bg-[#595959]/10'
               }`}
             >
@@ -159,7 +159,7 @@ export default function AdminPortal() {
 
             <button
               onClick={() => setActiveTab('audit')}
-              className={`px-4 py-2 rounded-xl transition flex items-center gap-2 cursor-pointer ${
+              className={`px-4 py-2 rounded-xl transition-all duration-200 flex items-center gap-2 cursor-pointer btn-interactive ${
                 activeTab === 'audit' ? 'bg-[#D60303] text-[#EFEEEA] shadow-xs' : 'bg-[#EFEEEA] border border-[#595959] text-[#595959] hover:bg-[#595959]/10'
               }`}
             >
@@ -170,8 +170,8 @@ export default function AdminPortal() {
 
           {/* TAB 1: Event Controls */}
           {activeTab === 'overview' && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <form onSubmit={handleSaveSettings} className="bg-[#EFEEEA] p-6 rounded-2xl space-y-5 border border-[#595959] shadow-sm">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-slide-up">
+              <form onSubmit={handleSaveSettings} className="bg-[#EFEEEA] p-6 rounded-2xl space-y-5 border border-[#595959] shadow-sm card-hover-lift">
                 <h3 className="text-base font-bold text-[#A30B1A] flex items-center gap-2">
                   <Settings className="w-5 h-5 text-[#D60303]" />
                   <span>Dynamic Registration & Qualification Limits</span>
@@ -184,7 +184,7 @@ export default function AdminPortal() {
                       type="number"
                       value={regCount}
                       onChange={(e) => setRegCount(e.target.value)}
-                      className="w-full px-4 py-2.5 bg-[#EFEEEA] border border-[#595959] rounded-xl text-[#595959] font-mono focus:border-[#D60303] focus:outline-none"
+                      className="w-full px-4 py-2.5 bg-[#EFEEEA] border border-[#595959] rounded-xl text-[#595959] font-mono focus:border-[#D60303] focus:outline-none transition-colors"
                     />
                   </div>
 
@@ -194,7 +194,7 @@ export default function AdminPortal() {
                       type="number"
                       value={r1Qualify}
                       onChange={(e) => setR1Qualify(e.target.value)}
-                      className="w-full px-4 py-2.5 bg-[#EFEEEA] border border-[#595959] rounded-xl text-[#595959] font-mono focus:border-[#D60303] focus:outline-none"
+                      className="w-full px-4 py-2.5 bg-[#EFEEEA] border border-[#595959] rounded-xl text-[#595959] font-mono focus:border-[#D60303] focus:outline-none transition-colors"
                     />
                   </div>
 
@@ -204,7 +204,7 @@ export default function AdminPortal() {
                       type="number"
                       value={r2Qualify}
                       onChange={(e) => setR2Qualify(e.target.value)}
-                      className="w-full px-4 py-2.5 bg-[#EFEEEA] border border-[#595959] rounded-xl text-[#595959] font-mono focus:border-[#D60303] focus:outline-none"
+                      className="w-full px-4 py-2.5 bg-[#EFEEEA] border border-[#595959] rounded-xl text-[#595959] font-mono focus:border-[#D60303] focus:outline-none transition-colors"
                     />
                   </div>
 
@@ -213,7 +213,7 @@ export default function AdminPortal() {
                     <select
                       value={currentStatus}
                       onChange={(e) => setCurrentStatus(e.target.value)}
-                      className="w-full px-4 py-2.5 bg-[#EFEEEA] border border-[#595959] rounded-xl text-[#595959] font-mono focus:border-[#D60303] focus:outline-none"
+                      className="w-full px-4 py-2.5 bg-[#EFEEEA] border border-[#595959] rounded-xl text-[#595959] font-mono focus:border-[#D60303] focus:outline-none transition-colors"
                     >
                       <option value="REGISTRATION">REGISTRATION OPEN</option>
                       <option value="ROUND_1_RUNNING">ROUND 1 — TECH QUIZ RUNNING</option>
@@ -228,31 +228,31 @@ export default function AdminPortal() {
 
                 <button
                   type="submit"
-                  className="w-full py-3 rounded-xl bg-[#D60303] hover:bg-[#A30B1A] text-[#EFEEEA] font-bold text-xs shadow-md transition cursor-pointer"
+                  className="w-full py-3 rounded-xl bg-[#D60303] hover:bg-[#A30B1A] text-[#EFEEEA] font-bold text-xs shadow-md transition cursor-pointer btn-interactive"
                 >
                   Save Configuration Changes
                 </button>
               </form>
 
               <div className="space-y-4">
-                <div className="bg-[#EFEEEA] p-6 rounded-2xl space-y-4 border border-[#595959] shadow-sm">
+                <div className="bg-[#EFEEEA] p-6 rounded-2xl space-y-4 border border-[#595959] shadow-sm card-hover-lift">
                   <h3 className="text-base font-bold text-[#A30B1A]">Symposium Live Metrics</h3>
                   <div className="grid grid-cols-2 gap-3 text-xs">
                     <div className="p-3 bg-[#EFEEEA] rounded-xl border border-[#595959]">
                       <p className="text-[#595959] font-semibold">Live Registered</p>
-                      <p className="text-2xl font-black text-[#A30B1A] mt-1">{leaderboard.length}</p>
+                      <p className="text-2xl font-black text-[#A30B1A] mt-1 font-mono">{leaderboard.length}</p>
                     </div>
                     <div className="p-3 bg-[#EFEEEA] rounded-xl border border-[#595959]">
                       <p className="text-[#595959] font-semibold">Round 1 Target</p>
-                      <p className="text-2xl font-black text-[#D60303] mt-1">{r1Qualify}</p>
+                      <p className="text-2xl font-black text-[#D60303] mt-1 font-mono">{r1Qualify}</p>
                     </div>
                     <div className="p-3 bg-[#EFEEEA] rounded-xl border border-[#595959]">
                       <p className="text-[#595959] font-semibold">Round 2 Target</p>
-                      <p className="text-2xl font-black text-[#C23D31] mt-1">{r2Qualify}</p>
+                      <p className="text-2xl font-black text-[#C23D31] mt-1 font-mono">{r2Qualify}</p>
                     </div>
                     <div className="p-3 bg-[#EFEEEA] rounded-xl border border-[#595959]">
                       <p className="text-[#595959] font-semibold">Questions Active</p>
-                      <p className="text-2xl font-black text-[#595959] mt-1">{questions.length}</p>
+                      <p className="text-2xl font-black text-[#595959] mt-1 font-mono">{questions.length}</p>
                     </div>
                   </div>
                 </div>
@@ -262,7 +262,7 @@ export default function AdminPortal() {
 
           {/* TAB 2: Live Leaderboard */}
           {activeTab === 'qualifications' && (
-            <div className="bg-[#EFEEEA] p-6 rounded-2xl border border-[#595959] shadow-sm space-y-4">
+            <div className="bg-[#EFEEEA] p-6 rounded-2xl border border-[#595959] shadow-sm space-y-4 card-hover-lift animate-slide-up">
               <h3 className="text-base font-bold text-[#A30B1A]">Live Participant Scoreboard</h3>
 
               {leaderboard.length === 0 ? (
@@ -286,7 +286,7 @@ export default function AdminPortal() {
                     </thead>
                     <tbody className="divide-y divide-[#595959]/20 text-[#595959]">
                       {leaderboard.map(row => (
-                        <tr key={row.id} className="hover:bg-[#595959]/5 transition font-medium">
+                        <tr key={row.id} className="hover:bg-[#595959]/5 transition-colors font-medium">
                           <td className="p-3 font-bold text-[#D60303]">#{row.rank}</td>
                           <td className="p-3 font-mono text-[#595959]">{row.id}</td>
                           <td className="p-3 font-semibold">{row.name}</td>
@@ -310,12 +310,14 @@ export default function AdminPortal() {
 
           {/* TAB 3: Question & Content Bank Management Hub */}
           {activeTab === 'questions' && (
-            <ContentManagementHub userRole="ADMIN" />
+            <div className="animate-slide-up">
+              <ContentManagementHub userRole="ADMIN" />
+            </div>
           )}
 
           {/* TAB 4: Anti-Cheat Audit Logs */}
           {activeTab === 'audit' && (
-            <div className="bg-[#EFEEEA] p-6 rounded-2xl border border-[#595959] shadow-sm space-y-4">
+            <div className="bg-[#EFEEEA] p-6 rounded-2xl border border-[#595959] shadow-sm space-y-4 card-hover-lift animate-slide-up">
               <h3 className="text-base font-bold text-[#A30B1A] flex items-center gap-2">
                 <ShieldAlert className="w-5 h-5 text-[#C23D31]" />
                 <span>Recorded Anti-Cheat Signals Audit Log</span>
@@ -326,7 +328,7 @@ export default function AdminPortal() {
               ) : (
                 <div className="space-y-2 text-xs font-mono">
                   {antiCheatFlags.map(flag => (
-                    <div key={flag.id} className="p-3 bg-[#EFEEEA] rounded-xl border border-[#595959] flex items-center justify-between font-semibold">
+                    <div key={flag.id} className="p-3 bg-[#EFEEEA] rounded-xl border border-[#595959] flex items-center justify-between font-semibold hover:border-[#D60303] transition-colors">
                       <div className="flex items-center gap-3">
                         <span className="text-[#C23D31] font-bold">[{flag.type}]</span>
                         <span className="text-[#595959]">{flag.message}</span>

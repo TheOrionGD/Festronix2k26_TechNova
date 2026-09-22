@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { ShieldCheck, X, Lock, Award, AlertCircle } from 'lucide-react';
 
@@ -24,6 +24,17 @@ export default function CoordinatorModal() {
   const [errorMsg, setErrorMsg] = useState('');
   const [isSuccess, setIsSuccess] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Close modal on Escape key press
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && isCoordinatorModalOpen) {
+        setIsCoordinatorModalOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isCoordinatorModalOpen, setIsCoordinatorModalOpen]);
 
   if (!isCoordinatorModalOpen) return null;
 
@@ -64,8 +75,14 @@ export default function CoordinatorModal() {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-[#595959]/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="w-full max-w-lg bg-[#EFEEEA] border border-[#595959] rounded-2xl shadow-2xl overflow-hidden text-[#595959]">
+    <div 
+      className="fixed inset-0 z-50 bg-[#595959]/60 backdrop-blur-sm flex items-center justify-center p-4 transition-opacity duration-300 animate-slide-up"
+      onClick={() => setIsCoordinatorModalOpen(false)}
+    >
+      <div 
+        className="w-full max-w-lg bg-[#EFEEEA] border border-[#595959] rounded-2xl shadow-2xl overflow-hidden text-[#595959] transition-all duration-300 transform scale-100"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Modal Header */}
         <div className="px-6 py-4 bg-[#A30B1A] flex items-center justify-between text-[#EFEEEA]">
           <div className="flex items-center gap-2 font-bold text-sm">
@@ -74,7 +91,7 @@ export default function CoordinatorModal() {
           </div>
           <button 
             onClick={() => setIsCoordinatorModalOpen(false)}
-            className="p-1 text-[#EFEEEA]/80 hover:text-[#EFEEEA] rounded-lg hover:bg-[#D60303] transition cursor-pointer"
+            className="p-1 text-[#EFEEEA]/80 hover:text-[#EFEEEA] rounded-lg hover:bg-[#D60303] transition cursor-pointer btn-interactive"
           >
             <X className="w-5 h-5" />
           </button>
@@ -82,7 +99,7 @@ export default function CoordinatorModal() {
 
         {/* Modal Body */}
         {isSuccess ? (
-          <div className="p-8 text-center space-y-3">
+          <div className="p-8 text-center space-y-3 animate-slide-up">
             <div className="w-16 h-16 bg-[#A30B1A]/20 text-[#A30B1A] rounded-full flex items-center justify-center mx-auto animate-bounce">
               <Award className="w-8 h-8 text-[#A30B1A]" />
             </div>
@@ -94,7 +111,7 @@ export default function CoordinatorModal() {
         ) : (
           <form onSubmit={handleVerify} className="p-6 space-y-5">
             {errorMsg && (
-              <div className="p-3 bg-[#C23D31]/10 border border-[#C23D31] rounded-xl text-[#A30B1A] text-xs flex items-center gap-2 font-semibold">
+              <div className="p-3 bg-[#C23D31]/10 border border-[#C23D31] rounded-xl text-[#A30B1A] text-xs flex items-center gap-2 font-semibold animate-slide-up">
                 <AlertCircle className="w-4 h-4 shrink-0 text-[#A30B1A]" />
                 <span>{errorMsg}</span>
               </div>
@@ -107,7 +124,7 @@ export default function CoordinatorModal() {
                   type="text"
                   value={participantIdInput}
                   onChange={(e) => setParticipantIdInput(e.target.value)}
-                  className="w-full px-3 py-1.5 bg-[#EFEEEA] border border-[#595959] rounded-lg text-xs text-[#595959] font-mono focus:border-[#D60303] focus:outline-none"
+                  className="w-full px-3 py-1.5 bg-[#EFEEEA] border border-[#595959] rounded-lg text-xs text-[#595959] font-mono focus:border-[#D60303] focus:outline-none transition-colors"
                   placeholder="e.g. TN2026-001"
                   required
                 />
@@ -118,7 +135,7 @@ export default function CoordinatorModal() {
             <div className="space-y-2">
               <p className="text-xs font-bold text-[#595959] uppercase tracking-wider">Physical Verification Checklist</p>
               <div className="space-y-2 text-xs text-[#595959]">
-                <label className="flex items-center gap-2 cursor-pointer p-2.5 rounded-lg bg-[#EFEEEA] border border-[#595959] hover:border-[#D60303]">
+                <label className="flex items-center gap-2 cursor-pointer p-2.5 rounded-lg bg-[#EFEEEA] border border-[#595959] hover:border-[#D60303] transition-colors">
                   <input
                     type="checkbox"
                     checked={checklist.codeChecked}
@@ -128,7 +145,7 @@ export default function CoordinatorModal() {
                   <span>1. Corrected code logic inspected</span>
                 </label>
 
-                <label className="flex items-center gap-2 cursor-pointer p-2.5 rounded-lg bg-[#EFEEEA] border border-[#595959] hover:border-[#D60303]">
+                <label className="flex items-center gap-2 cursor-pointer p-2.5 rounded-lg bg-[#EFEEEA] border border-[#595959] hover:border-[#D60303] transition-colors">
                   <input
                     type="checkbox"
                     checked={checklist.errorCorrected}
@@ -138,7 +155,7 @@ export default function CoordinatorModal() {
                   <span>2. Syntax/Logical error fix verified</span>
                 </label>
 
-                <label className="flex items-center gap-2 cursor-pointer p-2.5 rounded-lg bg-[#EFEEEA] border border-[#595959] hover:border-[#D60303]">
+                <label className="flex items-center gap-2 cursor-pointer p-2.5 rounded-lg bg-[#EFEEEA] border border-[#595959] hover:border-[#D60303] transition-colors">
                   <input
                     type="checkbox"
                     checked={checklist.localExecution}
@@ -148,7 +165,7 @@ export default function CoordinatorModal() {
                   <span>3. Local execution demonstrated</span>
                 </label>
 
-                <label className="flex items-center gap-2 cursor-pointer p-2.5 rounded-lg bg-[#EFEEEA] border border-[#595959] hover:border-[#D60303]">
+                <label className="flex items-center gap-2 cursor-pointer p-2.5 rounded-lg bg-[#EFEEEA] border border-[#595959] hover:border-[#D60303] transition-colors">
                   <input
                     type="checkbox"
                     checked={checklist.outputVerified}
@@ -168,7 +185,7 @@ export default function CoordinatorModal() {
                   type="text"
                   value={coordId}
                   onChange={(e) => setCoordId(e.target.value)}
-                  className="w-full px-3 py-2 bg-[#EFEEEA] border border-[#595959] rounded-xl text-xs text-[#595959] focus:border-[#D60303] focus:outline-none font-mono"
+                  className="w-full px-3 py-2 bg-[#EFEEEA] border border-[#595959] rounded-xl text-xs text-[#595959] focus:border-[#D60303] focus:outline-none font-mono transition-colors"
                   placeholder="COORD-ID"
                   required
                 />
@@ -180,7 +197,7 @@ export default function CoordinatorModal() {
                   type="password"
                   value={pin}
                   onChange={(e) => setPin(e.target.value)}
-                  className="w-full px-3 py-2 bg-[#EFEEEA] border border-[#595959] rounded-xl text-xs text-[#595959] focus:border-[#D60303] focus:outline-none font-mono"
+                  className="w-full px-3 py-2 bg-[#EFEEEA] border border-[#595959] rounded-xl text-xs text-[#595959] focus:border-[#D60303] focus:outline-none font-mono transition-colors"
                   placeholder="****"
                   required
                 />
@@ -192,7 +209,7 @@ export default function CoordinatorModal() {
               <select
                 value={marks}
                 onChange={(e) => setMarks(e.target.value)}
-                className="w-full px-3 py-2 bg-[#EFEEEA] border border-[#595959] rounded-xl text-xs text-[#595959] focus:border-[#D60303] focus:outline-none font-mono"
+                className="w-full px-3 py-2 bg-[#EFEEEA] border border-[#595959] rounded-xl text-xs text-[#595959] focus:border-[#D60303] focus:outline-none font-mono transition-colors"
               >
                 <option value={10}>10 Marks (Full Score)</option>
                 <option value={8}>8 Marks (Minor issue)</option>
@@ -204,7 +221,7 @@ export default function CoordinatorModal() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-2.5 rounded-xl bg-[#D60303] hover:bg-[#A30B1A] disabled:opacity-50 text-[#EFEEEA] font-bold text-xs shadow-md transition flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full py-2.5 rounded-xl bg-[#D60303] hover:bg-[#A30B1A] disabled:opacity-50 text-[#EFEEEA] font-bold text-xs shadow-md transition flex items-center justify-center gap-2 cursor-pointer btn-interactive"
             >
               <Lock className="w-4 h-4" />
               <span>{isLoading ? 'Verifying...' : `Verify & Award ${marks} Marks`}</span>

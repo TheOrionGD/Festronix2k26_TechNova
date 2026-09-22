@@ -2,14 +2,15 @@ import mongoose from 'mongoose';
 
 // User Schema
 const userSchema = new mongoose.Schema({
-  id: { type: String, required: true, unique: true },
+  id: { type: String, required: true, unique: true, index: true },
   name: { type: String, required: true },
-  email: { type: String, required: true },
+  email: { type: String, required: true, index: true },
   college: { type: String, default: '' },
   department: { type: String, default: '' },
   year: { type: String, default: '' },
   role: { type: String, enum: ['PARTICIPANT', 'COORDINATOR', 'ADMIN'], default: 'PARTICIPANT' },
   password: { type: String, required: true },
+  accountStatus: { type: String, enum: ['ACTIVE', 'LOCKED', 'SUSPENDED', 'PENDING'], default: 'ACTIVE' },
   assignedRound: { type: String, default: '' },
   pin: { type: String, default: '' },
   permissions: [{ type: String }] // e.g. MANAGE_QUESTIONS, MANAGE_DEBUG_PROBLEMS, MANAGE_CLUES

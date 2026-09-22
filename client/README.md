@@ -1,16 +1,24 @@
-# React + Vite
+# FESTRONIX Technova 2026 — Client Application
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+> [!IMPORTANT]
+> **Event-Exclusive Frontend Application**  
+> This frontend application is **custom-built exclusively for FESTRONIX Technova 2026** at the Department of CSE, K. Ramakrishnan College of Technology (KRCT). It is not a generic template or generic portal, but a purpose-built UI tailored specifically for Technova's 3-round competition pipeline.
 
-Currently, two official plugins are available:
+This directory contains the React 19 + Vite frontend client for the **FESTRONIX Technova** system.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+For full system architecture, installation instructions, database schemas, API reference, and user guides, please refer to the primary master documentation:
 
-## React Compiler
+👉 **[Master System README](../README.md)**
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Quick Start (Frontend)
 
-## Expanding the Oxlint configuration
+```bash
+# Install dependencies
+npm install
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+# Start Vite development server (Port 5173)
+npm run dev
+
+# Build production distribution
+npm run build
+```

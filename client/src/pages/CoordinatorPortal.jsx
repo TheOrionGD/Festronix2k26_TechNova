@@ -43,9 +43,9 @@ export default function CoordinatorPortal() {
       <div className="flex flex-1">
         <Sidebar />
 
-        <main className="flex-1 p-6 overflow-y-auto max-w-7xl mx-auto space-y-6">
+        <main className="flex-1 p-6 overflow-y-auto max-w-7xl mx-auto space-y-6 animate-hero-entrance">
           {/* Header */}
-          <div className="bg-[#EFEEEA] p-6 rounded-2xl border border-[#595959] shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="bg-[#EFEEEA] p-6 rounded-2xl border border-[#595959] shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4 card-hover-lift">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-xl bg-[#D60303]/10 text-[#D60303] flex items-center justify-center font-bold">
                 <ShieldCheck className="w-7 h-7 text-[#D60303]" />
@@ -58,7 +58,7 @@ export default function CoordinatorPortal() {
             </div>
 
             <div className="flex items-center gap-2 text-xs font-mono">
-              <span className="px-3 py-1 rounded-full bg-[#A30B1A] text-[#EFEEEA] font-bold">
+              <span className="px-3 py-1 rounded-full bg-[#A30B1A] text-[#EFEEEA] font-bold shadow-2xs">
                 COORD: {currentUser?.id || 'COORDINATOR'}
               </span>
             </div>
@@ -68,7 +68,7 @@ export default function CoordinatorPortal() {
           <div className="flex items-center gap-2 border-b border-[#595959]/20 pb-2 text-xs font-bold">
             <button
               onClick={() => setActiveTab('verification')}
-              className={`px-4 py-2 rounded-xl transition flex items-center gap-2 cursor-pointer ${
+              className={`px-4 py-2 rounded-xl transition-all duration-200 flex items-center gap-2 cursor-pointer btn-interactive ${
                 activeTab === 'verification' ? 'bg-[#D60303] text-[#EFEEEA] shadow-xs' : 'bg-[#EFEEEA] border border-[#595959] text-[#595959] hover:bg-[#595959]/10'
               }`}
             >
@@ -78,7 +78,7 @@ export default function CoordinatorPortal() {
 
             <button
               onClick={() => setActiveTab('content')}
-              className={`px-4 py-2 rounded-xl transition flex items-center gap-2 cursor-pointer ${
+              className={`px-4 py-2 rounded-xl transition-all duration-200 flex items-center gap-2 cursor-pointer btn-interactive ${
                 activeTab === 'content' ? 'bg-[#D60303] text-[#EFEEEA] shadow-xs' : 'bg-[#EFEEEA] border border-[#595959] text-[#595959] hover:bg-[#595959]/10'
               }`}
             >
@@ -89,7 +89,7 @@ export default function CoordinatorPortal() {
 
           {/* Tab 1: Physical Verification Queue */}
           {activeTab === 'verification' && (
-            <div className="bg-[#EFEEEA] p-6 rounded-2xl border border-[#595959] shadow-sm space-y-4">
+            <div className="bg-[#EFEEEA] p-6 rounded-2xl border border-[#595959] shadow-sm space-y-4 card-hover-lift animate-slide-up">
               <h3 className="text-base font-bold text-[#A30B1A]">Round 2 Solution Verification Queue</h3>
 
               {isLoading ? (
@@ -102,7 +102,7 @@ export default function CoordinatorPortal() {
                     const isVerified = sub.status === 'VERIFIED';
 
                     return (
-                      <div key={idx} className="p-5 bg-[#EFEEEA] rounded-2xl border border-[#595959] space-y-4 shadow-xs">
+                      <div key={idx} className="p-5 bg-[#EFEEEA] rounded-2xl border border-[#595959] space-y-4 shadow-xs card-hover-lift">
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#595959]/20 pb-3">
                           <div className="flex items-center gap-3">
                             <span className="w-7 h-7 rounded-xl bg-[#D60303] text-[#EFEEEA] font-bold text-xs flex items-center justify-center">
@@ -137,7 +137,7 @@ export default function CoordinatorPortal() {
                         <div className="flex justify-end pt-2">
                           <button
                             onClick={() => handleVerifyClick(sub.problemId)}
-                            className="px-6 py-2.5 rounded-xl bg-[#D60303] hover:bg-[#A30B1A] text-[#EFEEEA] font-bold text-xs shadow-md transition flex items-center gap-2 cursor-pointer"
+                            className="px-6 py-2.5 rounded-xl bg-[#D60303] hover:bg-[#A30B1A] text-[#EFEEEA] font-bold text-xs shadow-md transition flex items-center gap-2 cursor-pointer btn-interactive"
                           >
                             <Award className="w-4 h-4 text-[#EFEEEA]" />
                             <span>{isVerified ? 'Modify Verification Marks' : 'Perform Physical Verification'}</span>
@@ -153,7 +153,9 @@ export default function CoordinatorPortal() {
 
           {/* Tab 2: Content Management Hub */}
           {activeTab === 'content' && (
-            <ContentManagementHub userRole="COORDINATOR" />
+            <div className="animate-slide-up">
+              <ContentManagementHub userRole="COORDINATOR" />
+            </div>
           )}
         </main>
       </div>

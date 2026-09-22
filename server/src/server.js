@@ -126,6 +126,121 @@ async function getEventState() {
 // PUBLIC & AUTH ROUTES
 // ----------------------------------------------------
 
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+
+const JWT_SECRET = process.env.JWT_SECRET || 'technova_secret_symposium_key_2026';
+
+// Rate Limiter for Login Endpoint (10 requests per minute per IP)
+const loginRateLimitMap = new Map();
+function rateLimitLogin(req, res, next) {
+  const ip = req.ip || req.headers['x-forwarded-for'] || '127.0.0.1';
+  const now = Date.now();
+  const windowMs = 60 * 1000;
+  const maxAttempts = 10;
+
+  const record = loginRateLimitMap.get(ip) || { count: 0, resetTime: now + windowMs };
+
+  if (now > record.resetTime) {
+    record.count = 1;
+    record.resetTime = now + windowMs;
+  } else {
+    record.count += 1;
+  }
+
+  loginRateLimitMap.set(ip, record);
+
+  if (record.count > maxAttempts) {
+    return res.status(429).json({
+      success: false,
+      message: 'Too many authentication attempts. Please wait 1 minute before retrying.'
+    });
+  }
+  next();
+}
+
+// Authentication & Role Middleware
+export function authenticateToken(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ success: false, message: 'Authentication token required.' });
+  }
+
+  jwt.verify(token, JWT_SECRET, (err, decodedUser) => {
+    if (err) {
+      return res.status(403).json({ success: false, message: 'Invalid or expired authentication token.' });
+    }
+    req.user = decodedUser;
+    next();
+  });
+}
+
+export function authorizeRole(...roles) {
+  return (req, res, next) => {
+    if (!req.user || !roles.includes(req.user.role)) {
+      return res.status(403).json({ success: false, message: 'Forbidden: Insufficient privileges.' });
+    }
+    next();
+  };
+}
+
+// Seed default accounts if memory store is empty
+const defaultUsers = [
+  {
+    id: 'ADMIN-01',
+    name: 'Technova Super Admin',
+    email: 'admin@technova.edu',
+    college: 'K. Ramakrishnan College of Technology',
+    department: 'CSE',
+    role: 'ADMIN',
+    password: bcrypt.hashSync('admin123', 10),
+    accountStatus: 'ACTIVE',
+    permissions: ['MANAGE_ALL', 'MANAGE_QUESTIONS', 'MANAGE_DEBUG_PROBLEMS', 'MANAGE_CLUES']
+  },
+  {
+    id: 'COORD-01',
+    name: 'Lab Coordinator 1',
+    email: 'coord@technova.edu',
+    college: 'K. Ramakrishnan College of Technology',
+    department: 'CSE',
+    role: 'COORDINATOR',
+    pin: '1234',
+    password: bcrypt.hashSync('coord123', 10),
+    accountStatus: 'ACTIVE',
+    permissions: ['VERIFY_DEBUG', 'MANAGE_QUESTIONS']
+  },
+  {
+    id: 'TN2026-001',
+    name: 'John Reynolds',
+    email: 'john@technova.edu',
+    college: 'K. Ramakrishnan College of Technology',
+    department: 'CSE',
+    role: 'PARTICIPANT',
+    password: bcrypt.hashSync('user123', 10),
+    accountStatus: 'ACTIVE',
+    permissions: []
+  }
+];
+
+memoryStore.users = [...defaultUsers];
+
+// Seed default users to MongoDB if DB connected and empty
+async function seedDefaultUsersToDb() {
+  if (!isDbConnected) return;
+  try {
+    const count = await User.countDocuments();
+    if (count === 0) {
+      await User.insertMany(defaultUsers);
+      console.log('Default accounts (Admin, Coordinator, Participant) initialized in MongoDB.');
+    }
+  } catch (err) {
+    console.error('Failed to seed default accounts in DB:', err.message);
+  }
+}
+seedDefaultUsersToDb();
+
 app.get('/', (req, res) => {
   res.json({
     success: true,
@@ -136,7 +251,6 @@ app.get('/', (req, res) => {
 });
 
 app.get('/api/health', (req, res) => {
-
   res.json({ status: 'ok', dbConnected: isDbConnected, timestamp: new Date() });
 });
 
@@ -149,35 +263,76 @@ app.get('/api/event/status', async (req, res) => {
   }
 });
 
-app.post('/api/auth/login', async (req, res) => {
-  const { id, role, password, pin, email } = req.body;
+// Single Secure Authentication Endpoint (User ID + Password -> JWT Token + Role Authorization)
+app.post('/api/auth/login', rateLimitLogin, async (req, res) => {
+  const { id, userId, password, email } = req.body;
+  const inputId = (id || userId || email || '').trim();
+
+  if (!inputId || !password) {
+    return res.status(400).json({ success: false, message: 'User ID and Password are required.' });
+  }
 
   try {
     let user = null;
     if (isDbConnected) {
-      if (email) {
-        user = await User.findOne({ email });
-      } else if (id) {
-        user = await User.findOne({ id });
-      }
+      user = await User.findOne({
+        $or: [
+          { id: inputId },
+          { email: inputId.toLowerCase() }
+        ]
+      });
     } else {
-      user = memoryStore.users.find(u => (id && u.id === id) || (email && u.email === email));
+      user = memoryStore.users.find(u => 
+        (u.id && u.id.toLowerCase() === inputId.toLowerCase()) ||
+        (u.email && u.email.toLowerCase() === inputId.toLowerCase())
+      );
     }
 
     if (!user) {
-      return res.status(401).json({ success: false, message: 'Invalid credentials. User not found in system.' });
+      await createAuditLog(inputId, 'GUEST', 'LOGIN_FAILURE', inputId, { reason: 'User not found' });
+      return res.status(401).json({ success: false, message: 'Invalid credentials.' });
     }
 
-    if (password && user.password && user.password !== password) {
-      return res.status(401).json({ success: false, message: 'Incorrect password.' });
+    // Check account status
+    if (user.accountStatus && user.accountStatus !== 'ACTIVE') {
+      await createAuditLog(user.id, user.role, 'LOGIN_FAILURE', user.id, { reason: `Account ${user.accountStatus}` });
+      return res.status(401).json({ success: false, message: `Account is ${user.accountStatus.toLowerCase()}. Please contact administrator.` });
     }
 
-    if (role === 'COORDINATOR' && user.pin && pin && user.pin !== pin) {
-      return res.status(401).json({ success: false, message: 'Invalid Coordinator PIN.' });
+    // Server-Side Password Verification (Bcrypt + legacy transparent re-hashing)
+    let isPasswordValid = false;
+    if (user.password.startsWith('$2a$') || user.password.startsWith('$2b$')) {
+      isPasswordValid = await bcrypt.compare(password, user.password);
+    } else {
+      if (user.password === password) {
+        isPasswordValid = true;
+        const newHash = await bcrypt.hash(password, 10);
+        user.password = newHash;
+        if (isDbConnected) {
+          await User.updateOne({ _id: user._id }, { password: newHash });
+        }
+      }
     }
+
+    if (!isPasswordValid) {
+      await createAuditLog(user.id, user.role, 'LOGIN_FAILURE', user.id, { reason: 'Incorrect password' });
+      return res.status(401).json({ success: false, message: 'Invalid credentials.' });
+    }
+
+    // Issue JWT token with identity & trusted role claims
+    const tokenPayload = {
+      id: user.id,
+      name: user.name,
+      role: user.role,
+      permissions: user.permissions || []
+    };
+    const token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: '12h' });
+
+    await createAuditLog(user.id, user.role, 'LOGIN_SUCCESS', user.id);
 
     res.json({
       success: true,
+      token,
       user: {
         id: user.id,
         name: user.name,
@@ -191,7 +346,8 @@ app.post('/api/auth/login', async (req, res) => {
       }
     });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    console.error('Login Endpoint Error:', err);
+    res.status(500).json({ success: false, message: 'Server error processing authentication.' });
   }
 });
 
@@ -211,15 +367,17 @@ app.post('/api/auth/register', async (req, res) => {
     }
 
     const participantId = `TN2026-${String(count + 1).padStart(3, '0')}`;
+    const hashedPassword = await bcrypt.hash(password, 10);
     const newUser = {
       id: participantId,
       name,
-      email,
+      email: email.toLowerCase().trim(),
       college: college || '',
       department: department || '',
       year: year || '',
       role: 'PARTICIPANT',
-      password
+      password: hashedPassword,
+      accountStatus: 'ACTIVE'
     };
 
     if (isDbConnected) {
@@ -233,7 +391,10 @@ app.post('/api/auth/register', async (req, res) => {
     const currentState = await getEventState();
     io.emit('eventState:updated', currentState);
 
-    res.json({ success: true, user: newUser });
+    const safeUser = { ...newUser };
+    delete safeUser.password;
+
+    res.json({ success: true, user: safeUser });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

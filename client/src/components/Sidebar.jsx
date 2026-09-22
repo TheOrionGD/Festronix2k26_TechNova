@@ -1,14 +1,14 @@
 import React from 'react';
 import { useApp } from '../context/AppContext';
-import { 
-  LayoutDashboard, 
-  CheckCircle2, 
-  Code2, 
-  Lock, 
-  Trophy, 
-  FileText, 
-  Megaphone, 
-  User, 
+import {
+  LayoutDashboard,
+  CheckCircle2,
+  Code2,
+  Lock,
+  Trophy,
+  FileText,
+  Megaphone,
+  User,
   HelpCircle,
   ShieldCheck
 } from 'lucide-react';
@@ -18,26 +18,26 @@ export default function Sidebar() {
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, targetScreen: 'dashboard' },
-    { 
-      id: 'round1', 
-      label: 'Round 1 — Tech Quiz', 
-      icon: CheckCircle2, 
+    {
+      id: 'round1',
+      label: 'Round 1 — Tech Quiz',
+      icon: CheckCircle2,
       status: 'completed',
-      targetScreen: 'round1' 
+      targetScreen: 'round1'
     },
-    { 
-      id: 'round2', 
-      label: 'Round 2 — Debug It', 
-      icon: Code2, 
+    {
+      id: 'round2',
+      label: 'Round 2 — Debug It',
+      icon: Code2,
       status: 'active',
-      targetScreen: 'round2' 
+      targetScreen: 'round2'
     },
-    { 
-      id: 'round3', 
-      label: 'Round 3 — Tech Hunt', 
-      icon: Lock, 
+    {
+      id: 'round3',
+      label: 'Round 3 — Tech Hunt',
+      icon: Lock,
       status: 'locked',
-      targetScreen: 'round3' 
+      targetScreen: 'round3'
     }
   ];
 
@@ -51,7 +51,7 @@ export default function Sidebar() {
   ];
 
   return (
-    <aside className="w-64 bg-[#EFEEEA] border-r border-[#595959]/30 flex flex-col justify-between h-[calc(100vh-4rem)] sticky top-16 select-none shrink-0 text-[#595959]">
+    <aside className="w-64 bg-[#EFEEEA] border-r border-[#595959]/30 flex flex-col justify-between h-[calc(100vh-4rem)] sticky top-16 select-none shrink-0 text-[#595959] transition-all duration-200">
       <div className="p-4 space-y-6">
         {/* Main Navigation */}
         <div className="space-y-1">
@@ -64,18 +64,16 @@ export default function Sidebar() {
               <button
                 key={item.id}
                 onClick={() => setCurrentScreen(item.targetScreen)}
-                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all group ${
-                  isActive 
-                    ? 'bg-[#D60303] text-[#EFEEEA] shadow-md' 
-                    : 'text-[#595959] hover:bg-[#595959]/10 border border-transparent'
-                }`}
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 group cursor-pointer ${isActive
+                    ? 'bg-[#D60303] text-[#EFEEEA] shadow-md transform translate-x-1'
+                    : 'text-[#595959] hover:bg-[#595959]/10 hover:translate-x-1 border border-transparent'
+                  }`}
               >
                 <div className="flex items-center gap-3">
-                  <Icon className={`w-4 h-4 ${
-                    isActive ? 'text-[#EFEEEA]' : 
-                    item.status === 'completed' ? 'text-[#A30B1A]' : 
-                    item.status === 'active' ? 'text-[#D60303]' : 'text-[#595959]'
-                  }`} />
+                  <Icon className={`w-4 h-4 transition-transform duration-200 group-hover:scale-110 ${isActive ? 'text-[#EFEEEA]' :
+                      item.status === 'completed' ? 'text-[#A30B1A]' :
+                        item.status === 'active' ? 'text-[#D60303]' : 'text-[#595959]'
+                    }`} />
                   <span>{item.label}</span>
                 </div>
 
@@ -107,20 +105,18 @@ export default function Sidebar() {
               <button
                 key={item.id}
                 onClick={() => setCurrentScreen(item.targetScreen)}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition ${
-                  isActive
-                    ? 'bg-[#A30B1A] text-[#EFEEEA]'
-                    : 'text-[#595959] hover:bg-[#595959]/10'
-                }`}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-200 cursor-pointer ${isActive
+                    ? 'bg-[#A30B1A] text-[#EFEEEA] transform translate-x-1'
+                    : 'text-[#595959] hover:bg-[#595959]/10 hover:translate-x-1'
+                  }`}
               >
                 <div className="flex items-center gap-3">
                   <Icon className={`w-4 h-4 ${isActive ? 'text-[#EFEEEA]' : 'text-[#595959]'}`} />
                   <span>{item.label}</span>
                 </div>
                 {item.role && (
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-bold ${
-                    isActive ? 'bg-[#EFEEEA] text-[#A30B1A]' : 'bg-[#A30B1A] text-[#EFEEEA]'
-                  }`}>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-bold ${isActive ? 'bg-[#EFEEEA] text-[#A30B1A]' : 'bg-[#A30B1A] text-[#EFEEEA]'
+                    }`}>
                     {item.role}
                   </span>
                 )}
@@ -132,10 +128,10 @@ export default function Sidebar() {
 
       {/* Footer Branding Graphic */}
       <div className="p-4 border-t border-[#595959]/20 bg-[#595959]/5 relative overflow-hidden">
-        <svg className="absolute bottom-0 left-0 opacity-15 w-full h-16 text-[#D60303]" viewBox="0 0 100 40" fill="none">
-          <path d="M0 30 H30 L45 15 H80 L100 35" stroke="currentColor" strokeWidth="1.5" strokeDasharray="3 3"/>
-          <circle cx="45" cy="15" r="2.5" fill="currentColor"/>
-          <circle cx="80" cy="15" r="2.5" fill="currentColor"/>
+        <svg className="absolute bottom-0 left-0 opacity-15 w-full h-16 text-[#D60303] animate-pulse-glow" viewBox="0 0 100 40" fill="none">
+          <path d="M0 30 H30 L45 15 H80 L100 35" stroke="currentColor" strokeWidth="1.5" strokeDasharray="3 3" />
+          <circle cx="45" cy="15" r="2.5" fill="currentColor" />
+          <circle cx="80" cy="15" r="2.5" fill="currentColor" />
         </svg>
 
         <div className="relative z-10">
