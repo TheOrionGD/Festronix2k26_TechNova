@@ -1,5 +1,5 @@
 import React from 'react';
-import { useApp } from '../context/AppContext';
+import { useApp } from '../context/useApp';
 import {
   LayoutDashboard,
   CheckCircle2,
@@ -144,6 +144,9 @@ export default function Sidebar() {
           </p>
           <p className="text-[10px] font-black text-[#A30B1A] dark:text-[#ef4444] tracking-widest mt-0.5 uppercase font-mono">
             TECHNOVA 2026
+          </p>
+          <p className="text-[9px] font-mono text-zinc-400/80 dark:text-zinc-600/80 mt-1 select-none font-medium">
+            The system is built using Antigravity
           </p>
         </div>
       </div>

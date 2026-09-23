@@ -23,7 +23,7 @@ try {
   dns.setDefaultResultOrder('ipv4first');
 } catch (e) {}
 
-const mongoUri = process.env.DATABASE_URL || process.env.MONGODB_URI || '';
+const mongoUri = process.env.DATABASE_URL ?? process.env.MONGODB_URI;
 const PORT = process.env.PORT || 5000;
 
 async function clearAllData() {

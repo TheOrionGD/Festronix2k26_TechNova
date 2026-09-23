@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { useApp } from '../context/AppContext';
+import { useApp } from '../context/useApp';
 import { API_BASE } from '../config';
 import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
-import { 
-  Code, 
-  Copy, 
-  Send, 
-  CheckCircle2, 
-  Clock, 
+import {
+  Code,
+  Copy,
+  Send,
+  CheckCircle2,
+  Clock,
   AlertTriangle,
   Award,
   Terminal
@@ -27,7 +27,7 @@ export default function Round2Debug() {
 
   useEffect(() => {
     const initDebug = async () => {
-      const pid = currentUser?.id || 'TN2026-GUEST';
+      const pid = currentUser?.id;
       try {
         const checkRes = await fetch(`${API_BASE}/debug/current?participantId=${pid}`);
         const checkData = await checkRes.json();
@@ -48,9 +48,10 @@ export default function Round2Debug() {
         if (startData.success) {
           setProblems(startData.problems || []);
         } else {
-          setErrorMessage(startData.message || 'Unable to start debugging round.');
+          setErrorMessage(startData.message);
         }
       } catch (err) {
+        console.error('Debug session init error:', err);
         setErrorMessage('Failed to connect to debug engine server.');
       } finally {
         setIsLoading(false);
@@ -71,7 +72,9 @@ export default function Round2Debug() {
         if (data.success) {
           setAllDebugBank(data.problems || []);
         }
-      } catch (err) {}
+      } catch (err) {
+        console.error('Fetch all debug bank error:', err);
+      }
     };
     fetchAllBank();
   }, []);
@@ -80,9 +83,9 @@ export default function Round2Debug() {
 
   // Dynamic Bonus Practice Problem resolution when on Problem 4 or Bonus problem
   const displayedProblem = (currentProblem?.isBonus || currentProblem?.problemNumber === 4)
-    ? (allDebugBank.find(p => (p.language || '').toUpperCase() === selectedBonusLang.toUpperCase() && p.isBonus) ||
-       allDebugBank.find(p => (p.language || '').toUpperCase() === selectedBonusLang.toUpperCase()) ||
-       currentProblem)
+    ? (allDebugBank.find(p => p.language?.toUpperCase() === selectedBonusLang.toUpperCase() && p.isBonus) ||
+      allDebugBank.find(p => p.language?.toUpperCase() === selectedBonusLang.toUpperCase()) ||
+      currentProblem)
     : currentProblem;
 
   const handleCopyCode = () => {
@@ -104,7 +107,7 @@ export default function Round2Debug() {
     }
 
     setIsSubmitting(true);
-    const pid = currentUser?.id || 'TN2026-GUEST';
+    const pid = currentUser?.id;
     const probId = displayedProblem.problemId;
 
     try {
@@ -128,9 +131,12 @@ export default function Round2Debug() {
             marks: 0
           }
         }));
+        setPendingVerificationProblemId(probId);
+        setIsCoordinatorModalOpen(true);
         alert('Code submitted for physical coordinator verification!');
       }
     } catch (err) {
+      console.error('Submit debug code error:', err);
       alert('Error submitting debug code.');
     } finally {
       setIsSubmitting(false);
@@ -187,7 +193,7 @@ export default function Round2Debug() {
                       <span className="px-2.5 py-1 bg-[#D60303] text-white font-mono font-bold text-xs rounded">
                         Problem #{currentProblem.problemNumber} of {currentProblem.totalProblems}
                       </span>
-                      
+
                       {(currentProblem?.isBonus || currentProblem?.problemNumber === 4) ? (
                         <div className="flex items-center gap-2">
                           <label className="text-xs font-mono font-bold text-[#D60303]">Select Practice Language:</label>
@@ -281,18 +287,33 @@ export default function Round2Debug() {
                       )}
                     </div>
 
-                    <button
-                      onClick={handleSubmitCode}
-                      disabled={isSubmitting || subState.status === 'VERIFIED' || isOffline}
-                      className={`px-6 py-2.5 rounded-xl text-xs font-bold shadow-md transition flex items-center gap-1.5 cursor-pointer btn-interactive ${
-                        isOffline 
-                          ? 'bg-zinc-400 text-white cursor-not-allowed opacity-60'
-                          : 'bg-[#D60303] hover:bg-[#A30B1A] disabled:opacity-50 text-white'
-                      }`}
-                    >
-                      <Send className="w-4 h-4" />
-                      <span>{isOffline ? 'Offline Sync Active' : isSubmitting ? 'Submitting...' : 'Submit for Verification'}</span>
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (displayedProblem) {
+                            setPendingVerificationProblemId(displayedProblem.problemId);
+                            setIsCoordinatorModalOpen(true);
+                          }
+                        }}
+                        className="px-4 py-2.5 rounded-xl text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white shadow-xs transition flex items-center gap-1.5 cursor-pointer btn-interactive"
+                      >
+                        <Award className="w-4 h-4" />
+                        <span>Request Verification</span>
+                      </button>
+
+                      <button
+                        onClick={handleSubmitCode}
+                        disabled={isSubmitting || subState.status === 'VERIFIED' || isOffline}
+                        className={`px-6 py-2.5 rounded-xl text-xs font-bold shadow-md transition flex items-center gap-1.5 cursor-pointer btn-interactive ${isOffline
+                            ? 'bg-zinc-400 text-white cursor-not-allowed opacity-60'
+                            : 'bg-[#D60303] hover:bg-[#A30B1A] disabled:opacity-50 text-white'
+                          }`}
+                      >
+                        <Send className="w-4 h-4" />
+                        <span>{isOffline ? 'Offline Sync Active' : isSubmitting ? 'Submitting...' : 'Submit Code'}</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -311,19 +332,37 @@ export default function Round2Debug() {
                           key={p.problemId}
                           onClick={() => {
                             setCurrentProbIdx(idx);
-                            setParticipantCode(submissions[p.problemId]?.code || '');
+                            setParticipantCode(submissions[p.problemId]?.code);
                           }}
-                          className={`w-full p-3 rounded-xl text-left text-xs font-bold transition-all duration-200 flex items-center justify-between cursor-pointer btn-interactive ${
-                            isCurrent
+                          className={`w-full p-3 rounded-xl text-left text-xs font-bold transition-all duration-200 flex items-center justify-between cursor-pointer btn-interactive ${isCurrent
                               ? 'bg-[#D60303] text-white shadow-sm transform translate-x-1'
                               : 'bg-[#F8F7F4] dark:bg-[#09090b] border border-zinc-200 dark:border-[#27272a] text-zinc-700 dark:text-[#a1a1aa] hover:bg-zinc-200 dark:hover:bg-[#1a1a1e]'
-                          }`}
+                            }`}
                         >
                           <span>Problem #{p.problemNumber} {isBonus ? '(Bonus Practice)' : `(${p.language})`}</span>
                         </button>
                       );
                     })}
                   </div>
+                </div>
+
+                {/* Live Leaderboard Standings Panel */}
+                <div className="bg-white/80 dark:bg-[#141417]/80 backdrop-blur-md p-5 rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80 shadow-sm space-y-3 card-hover-lift">
+                  <h4 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider font-mono flex items-center gap-1.5">
+                    <Award className="w-4 h-4 text-amber-500" /> Live Debug Rank
+                  </h4>
+                  {leaderboard && leaderboard.length > 0 ? (
+                    <div className="space-y-1.5 font-mono text-xs max-h-48 overflow-y-auto">
+                      {leaderboard.slice(0, 5).map((item, index) => (
+                        <div key={item.id || index} className="flex items-center justify-between p-2 rounded-lg bg-zinc-100 dark:bg-[#09090b]">
+                          <span className="truncate font-medium">{index + 1}. {item.name || item.id}</span>
+                          <span className="font-bold text-[#D60303]">{item.totalScore || 0} pts</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-zinc-500 font-mono">Live scores syncing...</p>
+                  )}
                 </div>
               </div>
             </div>

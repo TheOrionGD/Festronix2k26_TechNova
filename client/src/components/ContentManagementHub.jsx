@@ -104,7 +104,9 @@ export default function ContentManagementHub({ userRole = 'ADMIN' }) {
       const res = await fetch(`${API_BASE}/admin/questions`);
       const data = await res.json();
       if (data.success) setQuestions(data.questions);
-    } catch (err) {}
+    } catch (err) {
+      console.error('Fetch questions error:', err);
+    }
   };
 
   const fetchDebugProblems = async () => {
@@ -112,7 +114,9 @@ export default function ContentManagementHub({ userRole = 'ADMIN' }) {
       const res = await fetch(`${API_BASE}/admin/debug-problems`);
       const data = await res.json();
       if (data.success) setDebugProblems(data.problems);
-    } catch (err) {}
+    } catch (err) {
+      console.error('Fetch debug problems error:', err);
+    }
   };
 
   const fetchTechClues = async () => {
@@ -120,13 +124,17 @@ export default function ContentManagementHub({ userRole = 'ADMIN' }) {
       const res = await fetch(`${API_BASE}/admin/clues`);
       const data = await res.json();
       if (data.success) setTechClues(data.clues);
-    } catch (err) {}
+    } catch (err) {
+      console.error('Fetch tech clues error:', err);
+    }
   };
 
   useEffect(() => {
-    fetchQuestions();
-    fetchDebugProblems();
-    fetchTechClues();
+    Promise.resolve().then(() => {
+      fetchQuestions();
+      fetchDebugProblems();
+      fetchTechClues();
+    });
   }, []);
 
   // ---------------------------------------------------
@@ -137,14 +145,14 @@ export default function ContentManagementHub({ userRole = 'ADMIN' }) {
     if (question) {
       setEditingMcq(question);
       setMcqForm({
-        questionText: question.questionText || '',
-        category: question.category || 'Java',
-        difficulty: (question.difficulty || 'MEDIUM').toUpperCase(),
+        questionText: question.questionText,
+        category: question.category,
+        difficulty: question.difficulty?.toUpperCase(),
         options: question.options && question.options.length >= 4 ? [...question.options] : ['', '', '', ''],
         correctOption: question.correctOption !== undefined ? question.correctOption : 0,
-        explanation: question.explanation || '',
+        explanation: question.explanation,
         tags: Array.isArray(question.tags) ? question.tags.join(', ') : '',
-        status: question.status || 'ACTIVE'
+        status: question.status
       });
     } else {
       setEditingMcq(null);
@@ -198,9 +206,10 @@ export default function ContentManagementHub({ userRole = 'ADMIN' }) {
         setIsMcqModalOpen(false);
         fetchQuestions();
       } else {
-        alert(data.message || 'Error saving question.');
+        alert(data.message);
       }
     } catch (err) {
+      console.error('Save MCQ error:', err);
       alert('Network error communicating with backend server.');
     }
   };
@@ -211,7 +220,9 @@ export default function ContentManagementHub({ userRole = 'ADMIN' }) {
       const res = await fetch(`${API_BASE}/admin/questions/${id}`, { method: 'DELETE' });
       const data = await res.json();
       if (data.success) fetchQuestions();
-    } catch (err) {}
+    } catch (err) {
+      console.error('Delete MCQ error:', err);
+    }
   };
 
   const handleDuplicateMcq = async (q) => {
@@ -231,7 +242,9 @@ export default function ContentManagementHub({ userRole = 'ADMIN' }) {
       });
       const data = await res.json();
       if (data.success) fetchQuestions();
-    } catch (err) {}
+    } catch (err) {
+      console.error('Duplicate MCQ error:', err);
+    }
   };
 
   // ---------------------------------------------------
@@ -242,16 +255,16 @@ export default function ContentManagementHub({ userRole = 'ADMIN' }) {
     if (prob) {
       setEditingDebug(prob);
       setDebugForm({
-        title: prob.title || '',
-        description: prob.description || '',
-        language: prob.language || 'Python',
-        difficulty: (prob.difficulty || 'MEDIUM').toUpperCase(),
-        brokenCode: prob.brokenCode || '',
-        expectedOutput: prob.expectedOutput || '',
-        solutionSnippet: prob.solutionSnippet || '',
+        title: prob.title,
+        description: prob.description,
+        language: prob.language,
+        difficulty: prob.difficulty?.toUpperCase(),
+        brokenCode: prob.brokenCode,
+        expectedOutput: prob.expectedOutput,
+        solutionSnippet: prob.solutionSnippet,
         marks: prob.marks || 10,
-        category: prob.category || 'Logic',
-        status: prob.status || 'ACTIVE'
+        category: prob.category,
+        status: prob.status
       });
     } else {
       setEditingDebug(null);
@@ -300,6 +313,7 @@ export default function ContentManagementHub({ userRole = 'ADMIN' }) {
         fetchDebugProblems();
       }
     } catch (err) {
+      console.error('Save debug error:', err);
       alert('Server communication failed.');
     }
   };
@@ -309,7 +323,9 @@ export default function ContentManagementHub({ userRole = 'ADMIN' }) {
     try {
       await fetch(`${API_BASE}/admin/debug-problems/${id}`, { method: 'DELETE' });
       fetchDebugProblems();
-    } catch (err) {}
+    } catch (err) {
+      console.error('Delete debug error:', err);
+    }
   };
 
   // ---------------------------------------------------
@@ -321,14 +337,14 @@ export default function ContentManagementHub({ userRole = 'ADMIN' }) {
       setEditingClue(clue);
       setClueForm({
         station: clue.station || 1,
-        category: clue.category || 'Cybersecurity',
-        title: clue.title || '',
-        clueText: clue.clueText || clue.description || '',
-        answer: clue.answer || '',
-        hint: clue.hint || '',
+        category: clue.category,
+        title: clue.title,
+        clueText: clue.clueText || clue.description,
+        answer: clue.answer,
+        hint: clue.hint,
         hintPenalty: clue.hintPenalty || 2,
         marks: clue.marks || 10,
-        status: clue.status || 'ACTIVE'
+        status: clue.status
       });
     } else {
       setEditingClue(null);
@@ -376,6 +392,7 @@ export default function ContentManagementHub({ userRole = 'ADMIN' }) {
         fetchTechClues();
       }
     } catch (err) {
+      console.error('Save clue error:', err);
       alert('Server error saving clue.');
     }
   };
@@ -385,7 +402,9 @@ export default function ContentManagementHub({ userRole = 'ADMIN' }) {
     try {
       await fetch(`${API_BASE}/admin/clues/${id}`, { method: 'DELETE' });
       fetchTechClues();
-    } catch (err) {}
+    } catch (err) {
+      console.error('Delete clue error:', err);
+    }
   };
 
   // ---------------------------------------------------
@@ -405,6 +424,7 @@ export default function ContentManagementHub({ userRole = 'ADMIN' }) {
       downloadAnchor.click();
       downloadAnchor.remove();
     } catch (err) {
+      console.error('Export data error:', err);
       alert('Export failed.');
     }
   };
@@ -417,7 +437,7 @@ export default function ContentManagementHub({ userRole = 'ADMIN' }) {
         try {
           const parsed = JSON.parse(event.target.result);
           const keyMap = { questions: 'questionsList', debug: 'problemsList', clues: 'cluesList' };
-          const payloadKey = keyMap[type] || 'items';
+          const payloadKey = keyMap[type];
 
           const res = await fetch(`${API_BASE}/admin/${type === 'mcq' ? 'questions' : type === 'debug' ? 'debug-problems' : 'clues'}/import`, {
             method: 'POST',
@@ -432,6 +452,7 @@ export default function ContentManagementHub({ userRole = 'ADMIN' }) {
             if (type === 'clues') fetchTechClues();
           }
         } catch (err) {
+          console.error('Import file error:', err);
           alert('Invalid JSON file format.');
         }
       };
@@ -443,37 +464,37 @@ export default function ContentManagementHub({ userRole = 'ADMIN' }) {
   // ---------------------------------------------------
 
   const filteredMcqs = questions.filter(q => {
-    if (mcqCategory !== 'ALL' && (q.category || '').toLowerCase() !== mcqCategory.toLowerCase()) return false;
-    if (mcqDifficulty !== 'ALL' && (q.difficulty || '').toUpperCase() !== mcqDifficulty.toUpperCase()) return false;
-    if (mcqStatus !== 'ALL' && (q.status || 'ACTIVE').toUpperCase() !== mcqStatus.toUpperCase()) return false;
+    if (mcqCategory !== 'ALL' && q.category?.toLowerCase() !== mcqCategory.toLowerCase()) return false;
+    if (mcqDifficulty !== 'ALL' && q.difficulty?.toUpperCase() !== mcqDifficulty.toUpperCase()) return false;
+    if (mcqStatus !== 'ALL' && q.status?.toUpperCase() !== mcqStatus.toUpperCase()) return false;
     if (mcqSearch) {
       const qL = mcqSearch.toLowerCase();
       return (
-        (q.questionText || '').toLowerCase().includes(qL) ||
-        (q.category || '').toLowerCase().includes(qL)
+        q.questionText?.toLowerCase().includes(qL) ||
+        q.category?.toLowerCase().includes(qL)
       );
     }
     return true;
   });
 
   const filteredDebugs = debugProblems.filter(p => {
-    if (debugLanguage !== 'ALL' && (p.language || '').toLowerCase() !== debugLanguage.toLowerCase()) return false;
-    if (debugDifficulty !== 'ALL' && (p.difficulty || '').toUpperCase() !== debugDifficulty.toUpperCase()) return false;
-    if (debugStatus !== 'ALL' && (p.status || 'ACTIVE').toUpperCase() !== debugStatus.toUpperCase()) return false;
+    if (debugLanguage !== 'ALL' && p.language?.toLowerCase() !== debugLanguage.toLowerCase()) return false;
+    if (debugDifficulty !== 'ALL' && p.difficulty?.toUpperCase() !== debugDifficulty.toUpperCase()) return false;
+    if (debugStatus !== 'ALL' && p.status?.toUpperCase() !== debugStatus.toUpperCase()) return false;
     if (debugSearch) {
       const qL = debugSearch.toLowerCase();
-      return (p.title || '').toLowerCase().includes(qL) || (p.description || '').toLowerCase().includes(qL);
+      return p.title?.toLowerCase().includes(qL) || p.description?.toLowerCase().includes(qL);
     }
     return true;
   });
 
   const filteredClues = techClues.filter(c => {
     if (clueStation !== 'ALL' && String(c.station) !== String(clueStation)) return false;
-    if (clueCategory !== 'ALL' && (c.category || '').toLowerCase() !== clueCategory.toLowerCase()) return false;
-    if (clueStatus !== 'ALL' && (c.status || 'ACTIVE').toUpperCase() !== clueStatus.toUpperCase()) return false;
+    if (clueCategory !== 'ALL' && c.category?.toLowerCase() !== clueCategory.toLowerCase()) return false;
+    if (clueStatus !== 'ALL' && c.status?.toUpperCase() !== clueStatus.toUpperCase()) return false;
     if (clueSearch) {
       const qL = clueSearch.toLowerCase();
-      return (c.title || '').toLowerCase().includes(qL) || (c.clueText || c.description || '').toLowerCase().includes(qL);
+      return c.title?.toLowerCase().includes(qL) || (c.clueText || c.description)?.toLowerCase().includes(qL);
     }
     return true;
   });
@@ -725,7 +746,7 @@ export default function ContentManagementHub({ userRole = 'ADMIN' }) {
                           {q.difficulty}
                         </span>
                         <span className="px-2 py-0.5 rounded-full bg-[#A30B1A]/10 text-[#A30B1A] text-[10px] font-bold font-mono">
-                          {q.status || 'ACTIVE'}
+                          {q.status}
                         </span>
                       </div>
 
@@ -792,6 +813,10 @@ export default function ContentManagementHub({ userRole = 'ADMIN' }) {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
+              <span className="flex items-center gap-1 text-xs font-bold text-[#595959]">
+                <Filter className="w-3.5 h-3.5 text-[#D60303]" /> Filters:
+              </span>
+
               <select
                 value={debugLanguage}
                 onChange={(e) => setDebugLanguage(e.target.value)}
@@ -815,6 +840,17 @@ export default function ContentManagementHub({ userRole = 'ADMIN' }) {
                 <option value="EASY">EASY</option>
                 <option value="MEDIUM">MEDIUM</option>
                 <option value="HARD">HARD</option>
+              </select>
+
+              <select
+                value={debugStatus}
+                onChange={(e) => setDebugStatus(e.target.value)}
+                className="px-3 py-2 bg-[#EFEEEA] border border-[#595959] rounded-xl text-xs font-bold text-[#595959]"
+              >
+                <option value="ALL">All Statuses</option>
+                <option value="ACTIVE">ACTIVE</option>
+                <option value="DRAFT">DRAFT</option>
+                <option value="INACTIVE">INACTIVE</option>
               </select>
             </div>
           </div>
@@ -873,18 +909,48 @@ export default function ContentManagementHub({ userRole = 'ADMIN' }) {
               />
             </div>
 
-            <select
-              value={clueStation}
-              onChange={(e) => setClueStation(e.target.value)}
-              className="px-3 py-2 bg-[#EFEEEA] border border-[#595959] rounded-xl text-xs font-bold text-[#595959]"
-            >
-              <option value="ALL">All Stations</option>
-              <option value="1">Station 1</option>
-              <option value="2">Station 2</option>
-              <option value="3">Station 3</option>
-              <option value="4">Station 4</option>
-              <option value="5">Station 5</option>
-            </select>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="flex items-center gap-1 text-xs font-bold text-[#595959]">
+                <Sparkles className="w-3.5 h-3.5 text-amber-500" /> Filters:
+              </span>
+
+              <select
+                value={clueStation}
+                onChange={(e) => setClueStation(e.target.value)}
+                className="px-3 py-2 bg-[#EFEEEA] border border-[#595959] rounded-xl text-xs font-bold text-[#595959]"
+              >
+                <option value="ALL">All Stations</option>
+                <option value="1">Station 1</option>
+                <option value="2">Station 2</option>
+                <option value="3">Station 3</option>
+                <option value="4">Station 4</option>
+                <option value="5">Station 5</option>
+              </select>
+
+              <select
+                value={clueCategory}
+                onChange={(e) => setClueCategory(e.target.value)}
+                className="px-3 py-2 bg-[#EFEEEA] border border-[#595959] rounded-xl text-xs font-bold text-[#595959]"
+              >
+                <option value="ALL">All Categories</option>
+                <option value="Cybersecurity">Cybersecurity</option>
+                <option value="Networking">Networking</option>
+                <option value="Algorithms">Algorithms</option>
+                <option value="Hardware">Hardware</option>
+                <option value="Web">Web</option>
+              </select>
+
+              <select
+                value={clueStatus}
+                onChange={(e) => setClueStatus(e.target.value)}
+                className="px-3 py-2 bg-[#EFEEEA] border border-[#595959] rounded-xl text-xs font-bold text-[#595959]"
+              >
+                <option value="ALL">All Statuses</option>
+                <option value="ACTIVE">ACTIVE</option>
+                <option value="DRAFT">DRAFT</option>
+                <option value="INACTIVE">INACTIVE</option>
+              </select>
+            </div>
           </div>
 
           <div className="bg-[#EFEEEA] p-6 rounded-2xl border border-[#595959] shadow-sm space-y-3">

@@ -57,3 +57,12 @@ splash_screen_*.png
 *.sqlite
 *.sqlite3
 *.db
+
+# Data Management & Admin Scripts (Clearing & Seeding)
+server/src/clear_participants.js
+server/src/clear_users.js
+server/src/seedData.js
+**/clear_*.js
+**/seed_*.js
+**/seedData.js
+

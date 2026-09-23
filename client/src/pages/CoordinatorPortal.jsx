@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useApp } from '../context/AppContext';
+import { useApp } from '../context/useApp';
 import { API_BASE } from '../config';
 import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
@@ -101,7 +101,7 @@ export default function CoordinatorPortal() {
         setIsCountGenOpen(false);
         alert(`✅ Created ${data.createdCount} participants with ID = Password credentials! Participants auto-assigned equally across coordinators.`);
       } else {
-        alert(data.message || 'Generation failed.');
+        alert(data.message);
       }
     } catch (err) {
       alert('Error generating participants: ' + err.message);
@@ -118,6 +118,7 @@ export default function CoordinatorPortal() {
         setSubmissionsList(data.submissions);
       }
     } catch (err) {
+      console.error('Fetch coordinator queue error:', err);
       setSubmissionsList([]);
     } finally {
       setIsLoading(false);
@@ -132,6 +133,7 @@ export default function CoordinatorPortal() {
         setParticipantsList(data.users || []);
       }
     } catch (err) {
+      console.error('Fetch participants error:', err);
       setParticipantsList([]);
     }
   };
@@ -155,7 +157,9 @@ export default function CoordinatorPortal() {
       if (data.success && Array.isArray(data.colleges)) {
         setCollegesList(data.colleges);
       }
-    } catch (err) { }
+    } catch (err) {
+      console.error('Fetch colleges error:', err);
+    }
   };
 
   const handleAddNewCollege = async () => {
@@ -174,13 +178,17 @@ export default function CoordinatorPortal() {
         setNewCollegeInput('');
         setIsAddingNewCollege(false);
       }
-    } catch (err) { }
+    } catch (err) {
+      console.error('Add new college error:', err);
+    }
   };
 
   useEffect(() => {
-    fetchCoordinatorQueue();
-    fetchParticipants();
-    fetchColleges();
+    Promise.resolve().then(() => {
+      fetchCoordinatorQueue();
+      fetchParticipants();
+      fetchColleges();
+    });
   }, []);
 
   const handleVerifyClick = (problemId) => {
@@ -217,9 +225,10 @@ export default function CoordinatorPortal() {
         setIsCreatingPart(false);
         alert(`Participant ${data.user.id} created! Credentials: User ID = ${data.user.id}, Password = ${data.generatedPassword}`);
       } else {
-        setPartMsg(data.message || 'Failed to create participant.');
+        setPartMsg(data.message);
       }
     } catch (err) {
+      console.error('Create participant error:', err);
       setPartMsg('Server communication error.');
     }
   };
@@ -246,7 +255,7 @@ export default function CoordinatorPortal() {
         setIsBulkImportOpen(false);
         alert(`Successfully imported ${data.createdCount} participants! Password for each is set identical to User ID.`);
       } else {
-        alert(data.message || 'Bulk import failed.');
+        alert(data.message);
       }
     } catch (err) {
       alert('Invalid JSON syntax: ' + err.message);
@@ -262,7 +271,9 @@ export default function CoordinatorPortal() {
         fetchParticipants();
         fetchLeaderboard();
       }
-    } catch (err) { }
+    } catch (err) {
+      console.error('Delete participant error:', err);
+    }
   };
 
   return (
@@ -288,10 +299,10 @@ export default function CoordinatorPortal() {
 
             <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
               <span className="px-3 py-1 rounded-full bg-zinc-800 text-white font-bold shadow-2xs">
-                STATION: {currentUser?.assignedRound || 'Lab Terminal'}
+                STATION: {currentUser?.assignedRound}
               </span>
               <span className="px-3 py-1 rounded-full bg-[#A30B1A] text-white font-bold shadow-2xs">
-                COORD: {currentUser?.id || 'COORDINATOR'} ({myAllocatedCount} Assigned)
+                COORD: {currentUser?.id} ({myAllocatedCount} Assigned)
               </span>
             </div>
           </div>
@@ -306,7 +317,7 @@ export default function CoordinatorPortal() {
                 </h3>
               </div>
               <span className="text-xs font-mono font-bold px-3 py-1 rounded-full bg-[#D60303] text-white">
-                CURRENT STATUS: {eventState?.status || 'REGISTRATION'}
+                CURRENT STATUS: {eventState?.status}
               </span>
             </div>
 
@@ -427,7 +438,7 @@ export default function CoordinatorPortal() {
                         <div>
                           <p className="text-[11px] font-bold text-[#595959] mb-1">Submitted Code:</p>
                           <pre className="bg-[#595959] p-3 rounded-xl border border-[#595959] text-xs font-mono text-[#EFEEEA] leading-relaxed overflow-x-auto max-h-36">
-                            {sub.code || '// No code content'}
+                            {sub.code}
                           </pre>
                         </div>
 
@@ -793,13 +804,13 @@ export default function CoordinatorPortal() {
                           <td className="p-3 font-mono font-bold text-[#D60303]">{p.id}</td>
                           <td className="p-3 font-semibold">{p.name}</td>
                           <td className="p-3 text-[#595959]/80">{p.email}</td>
-                          <td className="p-3 text-[#595959] font-medium text-[11px]">{p.college || 'K. Ramakrishnan College of Technology'}</td>
+                          <td className="p-3 text-[#595959] font-medium text-[11px]">{p.college}</td>
                           <td className="p-3 font-mono text-[11px]">
                             <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 font-bold">
-                              {p.assignedRound || 'Unassigned'}
+                              {p.assignedRound}
                             </span>
                           </td>
-                          <td className="p-3 font-mono text-[11px]">{p.department || 'CSE'} ({p.year || 'III'})</td>
+                          <td className="p-3 font-mono text-[11px]">{p.department} ({p.year})</td>
                           <td className="p-3 text-center font-mono font-bold text-[#A30B1A]">Same as ID ({p.id})</td>
                           <td className="p-3 text-center">
                             <button

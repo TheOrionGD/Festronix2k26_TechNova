@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
-import { AppProvider, useApp } from './context/AppContext';
+import { AppProvider } from './context/AppContext';
+import { useApp } from './context/useApp';
 import CinematicParticleCanvas from './components/CinematicParticleCanvas';
 import SplashScreen from './pages/SplashScreen';
 import LandingPage from './pages/LandingPage';

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useApp } from '../context/AppContext';
+import { useApp } from '../context/useApp';
 import { ShieldCheck, X, Lock, Award, AlertCircle } from 'lucide-react';
 
 export default function CoordinatorModal() {
@@ -11,9 +11,9 @@ export default function CoordinatorModal() {
     currentUser
   } = useApp();
 
-  const [coordId, setCoordId] = useState(currentUser?.id || '');
+  const [coordId, setCoordId] = useState(currentUser?.id);
   const [pin, setPin] = useState('');
-  const [participantIdInput, setParticipantIdInput] = useState(currentUser?.id || '');
+  const [participantIdInput, setParticipantIdInput] = useState(currentUser?.id);
   const [checklist, setChecklist] = useState({
     codeChecked: false,
     errorCorrected: false,
@@ -70,7 +70,7 @@ export default function CoordinatorModal() {
         setIsCoordinatorModalOpen(false);
       }, 1500);
     } else {
-      setErrorMsg(result.message || 'Verification rejected by backend.');
+      setErrorMsg(result.message);
     }
   };
 

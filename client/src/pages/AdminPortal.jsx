@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useApp } from '../context/AppContext';
+import { useApp } from '../context/useApp';
 import { API_BASE } from '../config';
 import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
@@ -71,6 +71,7 @@ export default function AdminPortal() {
         setCoordinatorsList(data.users || []);
       }
     } catch (err) {
+      console.error('Fetch coordinators error:', err);
       setCoordinatorsList([]);
     }
   };
@@ -83,6 +84,7 @@ export default function AdminPortal() {
         setSegregationMatrix(data.matrix || []);
       }
     } catch (err) {
+      console.error('Fetch segregation matrix error:', err);
       setSegregationMatrix([]);
     }
   };
@@ -97,6 +99,7 @@ export default function AdminPortal() {
         alert(`Auto-rebalance successful! ${data.totalParticipants} participants equally divided among ${data.totalCoordinators} active coordinators.`);
       }
     } catch (err) {
+      console.error('Auto rebalance error:', err);
       alert('Failed to rebalance allocations.');
     } finally {
       setIsRebalancing(false);
@@ -104,9 +107,14 @@ export default function AdminPortal() {
   };
 
   useEffect(() => {
-    fetchCoordinators();
-    fetchSegregationMatrix();
-  }, []);
+    Promise.resolve().then(() => {
+      fetchCoordinators();
+      fetchSegregationMatrix();
+      if (typeof fetchQuestions === 'function') {
+        fetchQuestions();
+      }
+    });
+  }, [fetchQuestions]);
 
   const handleSaveSettings = (e) => {
     e.preventDefault();
@@ -137,7 +145,7 @@ export default function AdminPortal() {
           department: coordDept,
           assignedRound: coordLab,
           password: coordPassword.trim(),
-          pin: coordPin.trim() || '1234'
+          pin: coordPin.trim()
         })
       });
       const data = await res.json();
@@ -150,21 +158,22 @@ export default function AdminPortal() {
         setIsCreatingCoord(false);
         alert(`Coordinator ${data.user.id} created successfully! Password set.`);
       } else {
-        setCoordMsg(data.message || 'Failed to create coordinator.');
+        setCoordMsg(data.message);
       }
     } catch (err) {
+      console.error('Create coordinator error:', err);
       setCoordMsg('Server communication error.');
     }
   };
 
   const openEditUserModal = (user) => {
     setEditingUser(user);
-    setEditName(user.name || '');
-    setEditEmail(user.email || '');
-    setEditPin(user.pin || '');
-    setEditLab(user.assignedRound || '');
+    setEditName(user.name);
+    setEditEmail(user.email);
+    setEditPin(user.pin);
+    setEditLab(user.assignedRound);
     setEditPassword('');
-    setEditStatus(user.accountStatus || 'ACTIVE');
+    setEditStatus(user.accountStatus);
     setEditMsg('');
   };
 
@@ -192,9 +201,10 @@ export default function AdminPortal() {
         setEditingUser(null);
         alert(`Authentication record for ${editingUser.id} updated successfully!`);
       } else {
-        setEditMsg(data.message || 'Failed to update user record.');
+        setEditMsg(data.message);
       }
     } catch (err) {
+      console.error('Save user error:', err);
       setEditMsg('Error connecting to backend server.');
     }
   };
@@ -207,7 +217,9 @@ export default function AdminPortal() {
       if (data.success) {
         fetchCoordinators();
       }
-    } catch (err) { }
+    } catch (err) {
+      console.error('Delete coordinator error:', err);
+    }
   };
 
   return (
@@ -394,7 +406,7 @@ export default function AdminPortal() {
                   onClick={() => setIsCreatingCoord(!isCreatingCoord)}
                   className="px-4 py-2 rounded-xl bg-[#D60303] text-[#EFEEEA] font-bold text-xs flex items-center gap-2 cursor-pointer btn-interactive"
                 >
-                  <UserPlus className="w-4 h-4" />
+                  {isCreatingCoord ? <X className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
                   <span>{isCreatingCoord ? 'Cancel' : 'Add New Coordinator'}</span>
                 </button>
               </div>
@@ -482,9 +494,10 @@ export default function AdminPortal() {
                   <div className="flex justify-end pt-2">
                     <button
                       type="submit"
-                      className="px-6 py-2.5 rounded-xl bg-[#D60303] text-[#EFEEEA] font-bold shadow-md hover:bg-[#A30B1A] transition cursor-pointer btn-interactive"
+                      className="px-6 py-2.5 rounded-xl bg-[#D60303] text-[#EFEEEA] font-bold shadow-md hover:bg-[#A30B1A] transition cursor-pointer btn-interactive flex items-center gap-2"
                     >
-                      Create Coordinator Account
+                      <Plus className="w-4 h-4" />
+                      <span>Create Coordinator Account</span>
                     </button>
                   </div>
                 </form>
@@ -515,11 +528,11 @@ export default function AdminPortal() {
                           <td className="p-3 font-mono font-bold text-[#D60303]">{c.id}</td>
                           <td className="p-3 font-semibold">{c.name}</td>
                           <td className="p-3 text-[#595959]/80">{c.email}</td>
-                          <td className="p-3 font-mono text-[11px]">{c.assignedRound || 'Lab Terminal'}</td>
-                          <td className="p-3 text-center font-mono font-bold text-[#A30B1A]">{c.pin || '1234'}</td>
+                          <td className="p-3 font-mono text-[11px]">{c.assignedRound}</td>
+                          <td className="p-3 text-center font-mono font-bold text-[#A30B1A]">{c.pin}</td>
                           <td className="p-3 text-center">
                             <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold text-[10px]">
-                              {c.accountStatus || 'ACTIVE'}
+                              {c.accountStatus}
                             </span>
                           </td>
                           <td className="p-3 text-center flex items-center justify-center gap-1">
@@ -575,8 +588,9 @@ export default function AdminPortal() {
                     segregationMatrix.map((m, idx) => (
                       <div key={m.coordinatorId} className="p-4 bg-white/80 rounded-xl border border-[#595959]/30 space-y-2 card-hover-lift">
                         <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-mono font-bold text-[#D60303] bg-[#D60303]/10 px-2 py-0.5 rounded">
-                            {m.coordinatorId}
+                          <span className="text-[10px] font-mono font-bold text-[#D60303] bg-[#D60303]/10 px-2 py-0.5 rounded flex items-center gap-1">
+                            <KeyRound className="w-3 h-3 text-[#D60303]" />
+                            <span>Station #{idx + 1} — {m.coordinatorId}</span>
                           </span>
                           <span className="text-[10px] font-mono font-bold text-[#595959] bg-[#595959]/10 px-2 py-0.5 rounded">
                             {m.assignedLab}

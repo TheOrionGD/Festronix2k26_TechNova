@@ -1,7 +1,8 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { API_BASE } from '../config';
+import { AppContext } from './AppContextObject';
 
-const AppContext = createContext();
+export { AppContext };
 
 export const AppProvider = ({ children }) => {
   // Navigation Screens: 'splash' | 'landing' | 'login' | 'dashboard' | 'round1' | 'round2' | 'round3' | 'admin' | 'coordinator'
@@ -35,7 +36,7 @@ export const AppProvider = ({ children }) => {
 
   // Theme state: 'light' | 'dark'
   const [theme, setTheme] = useState(() => {
-    return localStorage.getItem('technova_theme') || 'light';
+    return localStorage.getItem('technova_theme') ?? 'light';
   });
 
   useEffect(() => {
@@ -54,6 +55,84 @@ export const AppProvider = ({ children }) => {
   // Anti-Cheat Logger Signals
   const [antiCheatFlags, setAntiCheatFlags] = useState([]);
   const [warningCount, setWarningCount] = useState(0);
+
+  // Fetch initial event state & live collections
+  const fetchEventState = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/event/status`);
+      const data = await res.json();
+      if (data.success && data.eventState) {
+        setEventState(data.eventState);
+      }
+    } catch (err) {
+      console.warn('Backend API connection offline, using default client state:', err.message);
+    }
+  };
+
+  const fetchLeaderboard = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/leaderboard`);
+      const data = await res.json();
+      if (data.success) {
+        setLeaderboard(data.leaderboard);
+      }
+    } catch (err) {
+      console.error('Fetch leaderboard error:', err);
+      setLeaderboard([]);
+    }
+  };
+
+  const fetchAnnouncements = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/announcements`);
+      const data = await res.json();
+      if (data.success) {
+        setAnnouncements(data.announcements);
+      }
+    } catch (err) {
+      console.error('Fetch announcements error:', err);
+      setAnnouncements([]);
+    }
+  };
+
+  const fetchQuestions = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/admin/questions`);
+      const data = await res.json();
+      if (data.success) {
+        setQuestions(data.questions || []);
+      }
+    } catch (err) {
+      console.error('Fetch questions error:', err);
+      setQuestions([]);
+    }
+  };
+
+  const fetchDebugProblems = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/admin/debug-problems`);
+      const data = await res.json();
+      if (data.success) {
+        setDebugProblems(data.problems || []);
+      }
+    } catch (err) {
+      console.error('Fetch debug problems error:', err);
+      setDebugProblems([]);
+    }
+  };
+
+  const fetchTechClues = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/admin/clues`);
+      const data = await res.json();
+      if (data.success) {
+        setTechClues(data.clues || []);
+      }
+    } catch (err) {
+      console.error('Fetch tech clues error:', err);
+      setTechClues([]);
+    }
+  };
 
   // Network Offline & 5-Second Heartbeat Synchronization
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
@@ -83,6 +162,7 @@ export const AppProvider = ({ children }) => {
           setShowOfflineToast(false);
         }
       } catch (err) {
+        console.error('Heartbeat check failed:', err);
         if (!isOffline) {
           setIsOffline(true);
           setShowOfflineToast(true);
@@ -101,86 +181,15 @@ export const AppProvider = ({ children }) => {
   const [pendingVerificationProblemId, setPendingVerificationProblemId] = useState(null);
   const [isCoordinatorModalOpen, setIsCoordinatorModalOpen] = useState(false);
 
-  // Fetch initial event state & live collections
-  const fetchEventState = async () => {
-    try {
-      const res = await fetch(`${API_BASE}/event/status`);
-      const data = await res.json();
-      if (data.success && data.eventState) {
-        setEventState(data.eventState);
-      }
-    } catch (err) {
-      console.warn('Backend API connection offline, using default client state:', err.message);
-    }
-  };
-
-  const fetchLeaderboard = async () => {
-    try {
-      const res = await fetch(`${API_BASE}/leaderboard`);
-      const data = await res.json();
-      if (data.success) {
-        setLeaderboard(data.leaderboard);
-      }
-    } catch (err) {
-      setLeaderboard([]);
-    }
-  };
-
-  const fetchAnnouncements = async () => {
-    try {
-      const res = await fetch(`${API_BASE}/announcements`);
-      const data = await res.json();
-      if (data.success) {
-        setAnnouncements(data.announcements);
-      }
-    } catch (err) {
-      setAnnouncements([]);
-    }
-  };
-
-  const fetchQuestions = async () => {
-    try {
-      const res = await fetch(`${API_BASE}/admin/questions`);
-      const data = await res.json();
-      if (data.success) {
-        setQuestions(data.questions || []);
-      }
-    } catch (err) {
-      setQuestions([]);
-    }
-  };
-
-  const fetchDebugProblems = async () => {
-    try {
-      const res = await fetch(`${API_BASE}/admin/debug-problems`);
-      const data = await res.json();
-      if (data.success) {
-        setDebugProblems(data.problems || []);
-      }
-    } catch (err) {
-      setDebugProblems([]);
-    }
-  };
-
-  const fetchTechClues = async () => {
-    try {
-      const res = await fetch(`${API_BASE}/admin/clues`);
-      const data = await res.json();
-      if (data.success) {
-        setTechClues(data.clues || []);
-      }
-    } catch (err) {
-      setTechClues([]);
-    }
-  };
-
   useEffect(() => {
-    fetchEventState();
-    fetchLeaderboard();
-    fetchAnnouncements();
-    fetchQuestions();
-    fetchDebugProblems();
-    fetchTechClues();
+    Promise.resolve().then(() => {
+      fetchEventState();
+      fetchLeaderboard();
+      fetchAnnouncements();
+      fetchQuestions();
+      fetchDebugProblems();
+      fetchTechClues();
+    });
   }, []);
 
   // Tab switch & Blur monitoring logger
@@ -189,7 +198,7 @@ export const AppProvider = ({ children }) => {
       if (document.hidden && currentUser?.role === 'PARTICIPANT' && (currentScreen === 'round1' || currentScreen === 'round2')) {
         const flag = {
           id: Date.now(),
-          participantId: currentUser?.id || 'UNKNOWN',
+          participantId: currentUser?.id,
           type: 'TAB_BLUR',
           timestamp: new Date().toLocaleTimeString(),
           message: 'Browser tab switched / window unfocused'
@@ -237,9 +246,10 @@ export const AppProvider = ({ children }) => {
         }
         return { success: true, role: data.user.role };
       } else {
-        return { success: false, message: data.message || 'Invalid credentials.' };
+        return { success: false, message: data.message };
       }
     } catch (err) {
+      console.error('Login error:', err);
       return { success: false, message: 'Server unavailable. Please try again.' };
     }
   };
@@ -275,7 +285,9 @@ export const AppProvider = ({ children }) => {
             output
           })
         });
-      } catch (err) {}
+      } catch (err) {
+        console.error('Submit debug code error:', err);
+      }
     }
   };
 
@@ -308,9 +320,10 @@ export const AppProvider = ({ children }) => {
         fetchLeaderboard();
         return { success: true };
       } else {
-        return { success: false, message: data.message || 'Verification failed.' };
+        return { success: false, message: data.message };
       }
     } catch (err) {
+      console.error('Verify debug submission error:', err);
       return { success: false, message: 'Server communication error.' };
     }
   };
@@ -322,7 +335,7 @@ export const AppProvider = ({ children }) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          participantId: currentUser?.id || 'GUEST',
+          participantId: currentUser?.id,
           stationId,
           answer
         })
@@ -346,6 +359,7 @@ export const AppProvider = ({ children }) => {
       }
       return false;
     } catch (err) {
+      console.error('Submit hunt answer error:', err);
       return false;
     }
   };
@@ -365,7 +379,9 @@ export const AppProvider = ({ children }) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newSettings)
       });
-    } catch (err) {}
+    } catch (err) {
+      console.error('Update event state error:', err);
+    }
   };
 
   const requestFullScreen = async () => {
@@ -429,7 +445,7 @@ export const AppProvider = ({ children }) => {
   // Round Access Validation Helper
   const isRoundUnlocked = (roundNumber) => {
     if (currentUser?.role === 'ADMIN' || currentUser?.role === 'COORDINATOR') return true;
-    const status = eventState?.status || 'REGISTRATION';
+    const status = eventState?.status;
     const activeR = eventState?.activeRound || 1;
 
     if (roundNumber === 1) {
@@ -526,4 +542,4 @@ export const AppProvider = ({ children }) => {
   );
 };
 
-export const useApp = () => useContext(AppContext);
+

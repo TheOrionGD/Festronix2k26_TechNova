@@ -1,23 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { useApp } from '../context/AppContext';
+import { useApp } from '../context/useApp';
 import { API_BASE } from '../config';
 import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
-import { 
-  Clock, 
-  Brain, 
-  CheckCircle2, 
-  ChevronLeft, 
-  ChevronRight, 
+import {
+  Clock,
+  Brain,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Send,
   AlertTriangle
 } from 'lucide-react';
 
 export default function Round1Quiz() {
-  const { 
-    setCurrentScreen, 
-    currentUser, 
-    warningCount, 
+  const {
+    setCurrentScreen,
+    currentUser,
+    warningCount,
     fetchLeaderboard,
     eventState,
     requestFullScreen,
@@ -30,7 +30,9 @@ export default function Round1Quiz() {
   );
 
   useEffect(() => {
-    requestFullScreen();
+    if (typeof requestFullScreen === 'function') {
+      requestFullScreen();
+    }
 
     const handleFullscreenChange = () => {
       const active = !!(document.fullscreenElement || document.webkitFullscreenElement);
@@ -44,7 +46,7 @@ export default function Round1Quiz() {
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
       document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
     };
-  }, []);
+  }, [requestFullScreen]);
 
   const [questions, setQuestions] = useState([]);
   const [attemptId, setAttemptId] = useState(null);
@@ -63,7 +65,7 @@ export default function Round1Quiz() {
   // Initialize or Restore Quiz Attempt
   useEffect(() => {
     const initQuiz = async () => {
-      const pid = currentUser?.id || 'TN2026-GUEST';
+      const pid = currentUser?.id;
       try {
         const checkRes = await fetch(`${API_BASE}/quiz/current?participantId=${pid}`);
         const checkData = await checkRes.json();
@@ -100,9 +102,10 @@ export default function Round1Quiz() {
             setTimeLeft(remSecs);
           }
         } else {
-          setErrorMessage(startData.message || 'Unable to start quiz.');
+          setErrorMessage(startData.message);
         }
       } catch (err) {
+        console.error('Init quiz error:', err);
         setErrorMessage('Failed to connect to backend quiz engine.');
       } finally {
         setIsLoading(false);
@@ -111,6 +114,40 @@ export default function Round1Quiz() {
 
     initQuiz();
   }, [currentUser]);
+
+  const handleSubmitQuiz = React.useCallback(async () => {
+    if (isSubmitting || isSubmitted) return;
+    if (isOffline) {
+      alert('System is currently in offline synchronization mode. Please reconnect your Wi-Fi/network to submit.');
+      return;
+    }
+    setIsSubmitting(true);
+
+    try {
+      const res = await fetch(`${API_BASE}/quiz/submit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          participantId: currentUser?.id,
+          attemptId: attemptId,
+          userAnswers
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setScoreResult(data.score);
+        setIsSubmitted(true);
+        fetchLeaderboard();
+      } else {
+        alert(data.message);
+      }
+    } catch (err) {
+      console.error('Submit quiz error:', err);
+      alert('Network error submitting quiz.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [isSubmitting, isSubmitted, isOffline, currentUser, attemptId, userAnswers, fetchLeaderboard]);
 
   // Countdown Timer
   useEffect(() => {
@@ -126,7 +163,7 @@ export default function Round1Quiz() {
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, [isSubmitted, isLoading, questions]);
+  }, [isSubmitted, isLoading, questions, handleSubmitQuiz]);
 
   const currentQ = questions[currentIdx];
 
@@ -148,43 +185,13 @@ export default function Round1Quiz() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          participantId: currentUser?.id || 'TN2026-GUEST',
+          participantId: currentUser?.id,
           questionId: qId,
           selectedOption: optIndex
         })
       });
-    } catch (err) {}
-  };
-
-  const handleSubmitQuiz = async () => {
-    if (isSubmitting || isSubmitted) return;
-    if (isOffline) {
-      alert('System is currently in offline synchronization mode. Please reconnect your Wi-Fi/network to submit.');
-      return;
-    }
-    setIsSubmitting(true);
-
-    try {
-      const res = await fetch(`${API_BASE}/quiz/submit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          participantId: currentUser?.id || 'TN2026-GUEST',
-          userAnswers
-        })
-      });
-      const data = await res.json();
-      if (data.success) {
-        setScoreResult(data.score);
-        setIsSubmitted(true);
-        fetchLeaderboard();
-      } else {
-        alert(data.message || 'Failed to submit quiz.');
-      }
     } catch (err) {
-      alert('Network error submitting quiz.');
-    } finally {
-      setIsSubmitting(false);
+      console.warn('Save answer error:', err);
     }
   };
 
@@ -211,16 +218,28 @@ export default function Round1Quiz() {
                 <Brain className="w-6 h-6 text-[#D60303]" />
               </div>
               <div>
-                <span className="text-[10px] font-mono font-bold text-[#D60303] uppercase tracking-widest">ROUND 1</span>
+                <span className="text-[10px] font-mono font-bold text-[#D60303] uppercase tracking-widest">
+                  ROUND 1 {eventState?.status ? `// ${eventState.status}` : ''}
+                </span>
                 <h2 className="text-lg font-bold text-zinc-900 dark:text-white">TECH QUIZ</h2>
               </div>
             </div>
 
-            {/* Countdown Timer & Offline Sync Indicator */}
-            <div className="flex items-center gap-4">
+            {/* Countdown Timer, Anti-Cheat Warning Badge, & Attempt Token */}
+            <div className="flex items-center gap-3">
+              {attemptId && (
+                <span className="px-2.5 py-1 rounded-lg bg-zinc-100 dark:bg-[#09090b] text-[10px] font-mono font-bold text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-[#27272a] hidden sm:inline-block">
+                  Attempt: {attemptId}
+                </span>
+              )}
+
+              <span className={`px-2.5 py-1 rounded-full text-[10px] font-mono font-bold border ${warningCount > 0 ? 'bg-amber-500/10 text-amber-600 border-amber-500/30' : 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30'}`}>
+                Anti-Cheat Warnings: {warningCount || 0}/3
+              </span>
+
               <div className="px-4 py-2 bg-[#F8F7F4] dark:bg-[#09090b] border border-zinc-200 dark:border-[#27272a] rounded-xl flex items-center gap-2 font-mono shadow-2xs">
                 <Clock className="w-4 h-4 text-[#D60303] animate-pulse" />
-                <span className="text-xs text-[#595959] dark:text-[#a1a1aa] font-bold">Time Remaining:</span>
+                <span className="text-xs text-[#595959] dark:text-[#a1a1aa] font-bold">Time:</span>
                 <span className={`text-sm font-extrabold ${timeLeft < 300 ? 'text-[#A30B1A] animate-bounce' : 'text-[#D60303]'}`}>
                   {formatTime(timeLeft)}
                 </span>
@@ -230,11 +249,10 @@ export default function Round1Quiz() {
                 <button
                   onClick={handleSubmitQuiz}
                   disabled={isSubmitting || isOffline}
-                  className={`px-4 py-2 rounded-xl font-bold text-xs shadow-md transition flex items-center gap-1.5 cursor-pointer btn-interactive ${
-                    isOffline 
-                      ? 'bg-zinc-400 text-white cursor-not-allowed opacity-60' 
+                  className={`px-4 py-2 rounded-xl font-bold text-xs shadow-md transition flex items-center gap-1.5 cursor-pointer btn-interactive ${isOffline
+                      ? 'bg-zinc-400 text-white cursor-not-allowed opacity-60'
                       : 'bg-[#D60303] hover:bg-[#A30B1A] text-white'
-                  }`}
+                    }`}
                 >
                   <Send className="w-4 h-4" />
                   <span>
@@ -326,11 +344,10 @@ export default function Round1Quiz() {
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => toggleFlagQuestion(currentQ.questionId)}
-                        className={`px-3 py-1 rounded-xl text-xs font-bold font-mono transition flex items-center gap-1.5 cursor-pointer btn-interactive ${
-                          flaggedQuestions[currentQ.questionId]
+                        className={`px-3 py-1 rounded-xl text-xs font-bold font-mono transition flex items-center gap-1.5 cursor-pointer btn-interactive ${flaggedQuestions[currentQ.questionId]
                             ? 'bg-amber-500 text-white shadow-xs'
                             : 'bg-zinc-100 dark:bg-[#09090b] text-zinc-600 dark:text-[#a1a1aa] hover:bg-amber-100 dark:hover:bg-amber-950/30'
-                        }`}
+                          }`}
                       >
                         🚩 {flaggedQuestions[currentQ.questionId] ? 'Flagged' : 'Flag for Review'}
                       </button>
@@ -354,16 +371,14 @@ export default function Round1Quiz() {
                         <button
                           key={optIdx}
                           onClick={() => handleSelectOption(optIdx)}
-                          className={`w-full p-4 rounded-xl text-left text-xs font-bold transition-all duration-200 flex items-center justify-between cursor-pointer btn-interactive ${
-                            isSelected
+                          className={`w-full p-4 rounded-xl text-left text-xs font-bold transition-all duration-200 flex items-center justify-between cursor-pointer btn-interactive ${isSelected
                               ? 'bg-[#D60303] text-white shadow-md border-transparent transform translate-x-1'
                               : 'bg-[#F8F7F4] dark:bg-[#09090b] border border-zinc-200 dark:border-[#27272a] text-zinc-900 dark:text-[#f4f4f5] hover:bg-zinc-100 dark:hover:bg-[#1a1a1e]'
-                          }`}
+                            }`}
                         >
                           <div className="flex items-center gap-3">
-                            <span className={`w-6 h-6 rounded-lg text-xs flex items-center justify-center font-bold transition-colors font-mono ${
-                              isSelected ? 'bg-white text-[#D60303]' : 'bg-zinc-200 dark:bg-[#27272a] text-zinc-700 dark:text-[#a1a1aa]'
-                            }`}>
+                            <span className={`w-6 h-6 rounded-lg text-xs flex items-center justify-center font-bold transition-colors font-mono ${isSelected ? 'bg-white text-[#D60303]' : 'bg-zinc-200 dark:bg-[#27272a] text-zinc-700 dark:text-[#a1a1aa]'
+                              }`}>
                               {String.fromCharCode(65 + optIdx)}
                             </span>
                             <span>{optionText}</span>
@@ -409,17 +424,15 @@ export default function Round1Quiz() {
                         <button
                           key={q.questionId}
                           onClick={() => setCurrentIdx(idx)}
-                          className={`w-8 h-8 rounded-lg text-xs font-bold font-mono transition-all duration-200 flex items-center justify-center cursor-pointer btn-interactive ${
-                            isCurrent
+                          className={`w-8 h-8 rounded-lg text-xs font-bold font-mono transition-all duration-200 flex items-center justify-center cursor-pointer btn-interactive ${isCurrent
                               ? 'ring-2 ring-[#D60303] font-extrabold shadow-md'
                               : ''
-                          } ${
-                            isFlagged
+                            } ${isFlagged
                               ? 'bg-amber-500 text-white'
                               : isAnswered
-                              ? 'bg-emerald-600 text-white'
-                              : 'bg-[#F8F7F4] dark:bg-[#09090b] border border-zinc-200 dark:border-[#27272a] text-zinc-700 dark:text-[#a1a1aa]'
-                          }`}
+                                ? 'bg-emerald-600 text-white'
+                                : 'bg-[#F8F7F4] dark:bg-[#09090b] border border-zinc-200 dark:border-[#27272a] text-zinc-700 dark:text-[#a1a1aa]'
+                            }`}
                         >
                           {idx + 1}
                         </button>

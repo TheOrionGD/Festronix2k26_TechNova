@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useApp } from '../context/AppContext';
+import { useApp } from '../context/useApp';
 import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
 import CoordinatorModal from '../components/CoordinatorModal';
@@ -51,8 +51,8 @@ export default function Dashboard() {
   const currentProblem = debugProblems.find(p => p.id === activeProblemId) || debugProblems[0];
   const submission = debugSubmissions[activeProblemId] || {};
 
-  const [correctedCodeInput, setCorrectedCodeInput] = useState(submission.code || '');
-  const [outputInput, setOutputInput] = useState(submission.output || '');
+  const [correctedCodeInput, setCorrectedCodeInput] = useState(submission.code);
+  const [outputInput, setOutputInput] = useState(submission.output);
   const [announcementSearch, setAnnouncementSearch] = useState('');
 
   const handleUpdateSubmission = (e) => {
@@ -212,10 +212,10 @@ export default function Dashboard() {
                 {currentUser?.name ? currentUser.name.charAt(0).toUpperCase() : 'P'}
               </div>
               <div>
-                <h2 className="text-2xl font-black text-zinc-900 dark:text-white">{currentUser?.name || 'Participant'}</h2>
-                <p className="text-xs font-mono font-bold text-[#D60303]">{currentUser?.id || 'TN2026-UNASSIGNED'}</p>
+                <h2 className="text-2xl font-black text-zinc-900 dark:text-white">{currentUser?.name}</h2>
+                <p className="text-xs font-mono font-bold text-[#D60303]">{currentUser?.id}</p>
                 <span className="inline-block text-[10px] font-mono px-2.5 py-0.5 mt-1 rounded bg-emerald-500/10 text-emerald-500 font-bold border border-emerald-500/20">
-                  {currentUser?.role || 'PARTICIPANT'}
+                  {currentUser?.role}
                 </span>
               </div>
             </div>
@@ -223,17 +223,17 @@ export default function Dashboard() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-zinc-100 dark:border-[#27272a] text-xs">
               <div className="p-3 bg-[#F8F7F4] dark:bg-[#09090b] rounded-xl border border-zinc-200 dark:border-[#27272a] space-y-1">
                 <span className="text-[10px] font-mono text-zinc-400 block uppercase">COLLEGE / INSTITUTION</span>
-                <span className="font-bold text-zinc-900 dark:text-white">{currentUser?.college || 'K. Ramakrishnan College of Technology'}</span>
+                <span className="font-bold text-zinc-900 dark:text-white">{currentUser?.college}</span>
               </div>
 
               <div className="p-3 bg-[#F8F7F4] dark:bg-[#09090b] rounded-xl border border-zinc-200 dark:border-[#27272a] space-y-1">
                 <span className="text-[10px] font-mono text-zinc-400 block uppercase">DEPARTMENT & YEAR</span>
-                <span className="font-bold text-zinc-900 dark:text-white">{currentUser?.department || 'CSE'} — {currentUser?.year || 'III Year'}</span>
+                <span className="font-bold text-zinc-900 dark:text-white">{currentUser?.department} — {currentUser?.year}</span>
               </div>
 
               <div className="p-3 bg-[#F8F7F4] dark:bg-[#09090b] rounded-xl border border-zinc-200 dark:border-[#27272a] space-y-1">
                 <span className="text-[10px] font-mono text-zinc-400 block uppercase">ASSIGNED LAB TERMINAL</span>
-                <span className="font-bold text-[#D60303] font-mono">{currentUser?.department || 'Lab Terminal 1'}</span>
+                <span className="font-bold text-[#D60303] font-mono">{currentUser?.department}</span>
               </div>
 
               <div className="p-3 bg-[#F8F7F4] dark:bg-[#09090b] rounded-xl border border-zinc-200 dark:border-[#27272a] space-y-1">
@@ -298,7 +298,7 @@ export default function Dashboard() {
         <div className="bg-white dark:bg-[#141417] p-6 rounded-2xl border border-red-500/60 shadow-sm relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-6 card-hover-lift card-shimmer card-border-glow">
           <div className="space-y-1.5 z-10">
             <h2 className="text-2xl font-black text-zinc-900 dark:text-white">
-              Welcome back, <span className="text-[#D60303]">{currentUser?.name || 'Participant'}!</span>
+              Welcome back, <span className="text-[#D60303]">{currentUser?.name}!</span>
             </h2>
             <p className="text-xs text-[#595959] dark:text-[#a1a1aa] font-medium max-w-xl">
               Complete competition modules sequentially. Every round is locked by default and activates when initiated by the Coordinator.
@@ -309,7 +309,7 @@ export default function Dashboard() {
             <div className="px-4 py-2 bg-[#EFEEEA] dark:bg-[#09090b] border border-[#595959]/30 dark:border-[#27272a] rounded-xl flex items-center gap-3 shadow-2xs">
               <div>
                 <p className="text-[10px] text-[#595959] dark:text-[#71717a] uppercase tracking-wider font-bold font-mono">Participant ID</p>
-                <p className="text-xs font-mono font-bold text-[#D60303]">{currentUser?.id || 'TN2026-UNASSIGNED'}</p>
+                <p className="text-xs font-mono font-bold text-[#D60303]">{currentUser?.id}</p>
               </div>
               {currentUser?.id && (
                 <button 
@@ -326,7 +326,18 @@ export default function Dashboard() {
               <Building2 className="w-4 h-4 text-[#D60303]" />
               <div>
                 <p className="text-[10px] text-[#595959] dark:text-[#71717a] uppercase tracking-wider font-bold font-mono">College</p>
-                <p className="text-xs font-bold text-zinc-900 dark:text-white">{currentUser?.college || 'Not specified'}</p>
+                <p className="text-xs font-bold text-zinc-900 dark:text-white">{currentUser?.college}</p>
+              </div>
+            </div>
+
+            <div className="px-4 py-2 bg-[#EFEEEA] dark:bg-[#09090b] border border-[#595959]/30 dark:border-[#27272a] rounded-xl flex items-center gap-3 shadow-2xs">
+              <Calendar className="w-4 h-4 text-amber-500" />
+              <div>
+                <p className="text-[10px] text-[#595959] dark:text-[#71717a] uppercase tracking-wider font-bold font-mono">Symposium Date</p>
+                <p className="text-xs font-bold text-zinc-900 dark:text-white flex items-center gap-1">
+                  <span>Sept 25, 2026</span>
+                  <Sparkles className="w-3 h-3 text-amber-400" />
+                </p>
               </div>
             </div>
           </div>
@@ -339,7 +350,7 @@ export default function Dashboard() {
               Competition Rounds Status & Progression
             </h3>
             <span className="text-[10px] font-mono text-[#D60303] font-bold uppercase">
-              ACTIVE PHASE: {eventState?.status || 'REGISTRATION'}
+              ACTIVE PHASE: {eventState?.status}
             </span>
           </div>
 
@@ -479,8 +490,8 @@ export default function Dashboard() {
                         key={p.id}
                         onClick={() => {
                           setActiveProblemId(p.id);
-                          setCorrectedCodeInput(debugSubmissions[p.id]?.code || '');
-                          setOutputInput(debugSubmissions[p.id]?.output || '');
+                          setCorrectedCodeInput(debugSubmissions[p.id]?.code);
+                          setOutputInput(debugSubmissions[p.id]?.output);
                         }}
                         className={`px-3 py-1.5 rounded-lg font-bold transition-all duration-200 cursor-pointer btn-interactive ${
                           activeProblemId === p.id 

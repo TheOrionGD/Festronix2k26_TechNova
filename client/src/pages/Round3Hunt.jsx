@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useApp } from '../context/AppContext';
+import { useApp } from '../context/useApp';
 import { API_BASE } from '../config';
 import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
@@ -22,7 +22,9 @@ export default function Round3Hunt() {
   );
 
   useEffect(() => {
-    requestFullScreen();
+    if (typeof requestFullScreen === 'function') {
+      requestFullScreen();
+    }
 
     const handleFullscreenChange = () => {
       const active = !!(document.fullscreenElement || document.webkitFullscreenElement);
@@ -36,7 +38,7 @@ export default function Round3Hunt() {
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
       document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
     };
-  }, []);
+  }, [requestFullScreen]);
 
   const [currentClueData, setCurrentClueData] = useState(null);
   const [participantAnswer, setParticipantAnswer] = useState('');
@@ -50,8 +52,8 @@ export default function Round3Hunt() {
   const [feedbackMsg, setFeedbackMsg] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const fetchHuntState = async () => {
-    const pid = currentUser?.id || 'TN2026-GUEST';
+  const fetchHuntState = React.useCallback(async () => {
+    const pid = currentUser?.id;
     try {
       const checkRes = await fetch(`${API_BASE}/hunt/current?participantId=${pid}`);
       const checkData = await checkRes.json();
@@ -63,7 +65,7 @@ export default function Round3Hunt() {
         setTotalSteps(checkData.totalSteps || 5);
         if (checkData.clue) {
           setCurrentClueData(checkData.clue);
-          setHintText(checkData.clue.hint || null);
+          setHintText(checkData.clue.hint);
         }
         setIsLoading(false);
         return;
@@ -81,20 +83,23 @@ export default function Round3Hunt() {
         setTotalSteps(startData.totalSteps || 5);
         setScore(startData.score || 0);
         setCurrentClueData(startData.clue);
-        setHintText(startData.clue.hint || null);
+        setHintText(startData.clue.hint);
       } else {
-        setErrorMessage(startData.message || 'Unable to start Tech Hunt.');
+        setErrorMessage(startData.message);
       }
     } catch (err) {
+      console.error('Fetch hunt state error:', err);
       setErrorMessage('Failed to connect to Tech Hunt engine server.');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [currentUser]);
 
   useEffect(() => {
-    fetchHuntState();
-  }, [currentUser]);
+    Promise.resolve().then(() => {
+      fetchHuntState();
+    });
+  }, [fetchHuntState]);
 
   const handleSubmitAnswer = async (e) => {
     e.preventDefault();
@@ -107,7 +112,7 @@ export default function Round3Hunt() {
 
     setIsSubmitting(true);
     setFeedbackMsg(null);
-    const pid = currentUser?.id || 'TN2026-GUEST';
+    const pid = currentUser?.id;
     const clueId = currentClueData.clueId;
 
     try {
@@ -139,6 +144,7 @@ export default function Round3Hunt() {
         setFeedbackMsg({ type: 'error', text: 'INCORRECT ANSWER. Re-examine the station clue and try again.' });
       }
     } catch (err) {
+      console.error('Submit clue error:', err);
       setFeedbackMsg({ type: 'error', text: 'Network error verifying clue answer.' });
     } finally {
       setIsSubmitting(false);
@@ -147,7 +153,7 @@ export default function Round3Hunt() {
 
   const handleRequestHint = async () => {
     if (!currentClueData) return;
-    const pid = currentUser?.id || 'TN2026-GUEST';
+    const pid = currentUser?.id;
     const clueId = currentClueData.clueId;
 
     try {
@@ -160,7 +166,9 @@ export default function Round3Hunt() {
       if (data.success && data.hint) {
         setHintText(data.hint);
       }
-    } catch (err) {}
+    } catch (err) {
+      console.error('Request hint error:', err);
+    }
   };
 
   return (
@@ -209,7 +217,11 @@ export default function Round3Hunt() {
                 </div>
 
                 <div className="space-y-2">
-                  <span className="text-xs font-mono font-bold text-[#D60303] uppercase tracking-widest">SYMPOSIUM PODIUM FINISHER</span>
+                  <span className="text-xs font-mono font-bold text-[#D60303] uppercase tracking-widest flex items-center justify-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-amber-500 animate-pulse" />
+                    <span>SYMPOSIUM PODIUM FINISHER</span>
+                    <Sparkles className="w-4 h-4 text-amber-500 animate-pulse" />
+                  </span>
                   <h3 className="text-3xl font-black text-zinc-900 dark:text-white">TECHNOVA 2026 CHAMPION</h3>
                   <p className="text-xs text-zinc-600 dark:text-[#a1a1aa] font-medium max-w-md mx-auto">
                     Grand victory! You have solved all station clues in TECHNOVA 2026.
@@ -220,6 +232,22 @@ export default function Round3Hunt() {
                   <span className="text-xs text-amber-800 dark:text-amber-300 font-bold block uppercase tracking-wider">Final Hunt Score</span>
                   <span className="text-4xl font-black text-[#D60303]">{score} PTS</span>
                 </div>
+
+                {leaderboard && leaderboard.length > 0 && (
+                  <div className="p-4 bg-zinc-50 dark:bg-[#09090b] rounded-2xl border border-zinc-200 dark:border-[#27272a] text-left space-y-2 font-mono text-xs">
+                    <span className="font-bold text-zinc-900 dark:text-white flex items-center gap-1">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-500" /> Live Symposium Standings
+                    </span>
+                    <div className="space-y-1">
+                      {leaderboard.slice(0, 3).map((item, idx) => (
+                        <div key={item.id || idx} className="flex justify-between items-center text-[11px]">
+                          <span>#{idx + 1} {item.name || item.id}</span>
+                          <span className="font-bold text-[#D60303]">{item.totalScore || 0} pts</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div className="pt-2 flex justify-center gap-3">
                   <button

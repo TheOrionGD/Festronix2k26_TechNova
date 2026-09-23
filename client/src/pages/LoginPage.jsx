@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useApp } from '../context/AppContext';
+import { useApp } from '../context/useApp';
 import CinematicParticleCanvas from '../components/CinematicParticleCanvas';
 import { 
   Code2, 
@@ -41,7 +41,7 @@ export default function LoginPage() {
     setIsLoading(false);
 
     if (!result.success) {
-      setErrorMsg(result.message || 'Invalid credentials.');
+      setErrorMsg(result.message);
     }
   };
 
@@ -98,8 +98,9 @@ export default function LoginPage() {
                   <img src="/technova_icon.jpg" alt="Technova Logo Icon" className="w-full h-full object-cover rounded-lg" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-black tracking-tight text-white leading-none font-mono">
-                    TECH<span className="text-red-200">NOVA</span>
+                  <h2 className="text-xl font-black tracking-tight text-white leading-none font-mono flex items-center gap-1.5">
+                    <Code2 className="w-5 h-5 text-red-200" />
+                    <span>TECH<span className="text-red-200">NOVA</span></span>
                   </h2>
                   <span className="text-[10px] font-mono text-red-100 font-semibold tracking-wider uppercase block mt-0.5">
                     FESTRONIX 2026
@@ -108,15 +109,17 @@ export default function LoginPage() {
               </div>
 
               <div className="pt-6 space-y-2">
-                <div className="status-pill-ready">
+                <div className="status-pill-ready flex items-center gap-1.5">
                   <span className="dot" />
+                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
                   <span>SYSTEM READY</span>
                 </div>
-                <h1 className="text-3xl sm:text-4xl font-black text-white leading-tight">
-                  Start your journey with us.
+                <h1 className="text-3xl sm:text-4xl font-black text-white leading-tight flex items-center gap-2">
+                  <span>Start your journey with us.</span>
                 </h1>
-                <p className="text-xs text-red-100/90 leading-relaxed font-normal pt-1">
-                  Embark on an elite competition platform engineered for competitive programming, debugging, and clue solving.
+                <p className="text-xs text-red-100/90 leading-relaxed font-normal pt-1 flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-emerald-300 shrink-0" />
+                  <span>Embark on an elite competition platform engineered for competitive programming, debugging, and clue solving.</span>
                 </p>
               </div>
             </div>

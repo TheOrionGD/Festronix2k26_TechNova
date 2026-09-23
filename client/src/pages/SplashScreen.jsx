@@ -1,12 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { useApp } from '../context/AppContext';
+import { useApp } from '../context/useApp';
 import { Code2, ArrowRight, ShieldCheck, Activity, Terminal, Play, Sparkles } from 'lucide-react';
 
 export default function SplashScreen() {
   const { setCurrentScreen, leaderboard, eventState } = useApp();
   const [progress, setProgress] = useState(0);
   const [isReady, setIsReady] = useState(false);
-  const [typedLines, setTypedLines] = useState(0);
   const [activeTab] = useState('welcome_technova.cpp');
 
   const fullCodeLines = [
@@ -44,11 +43,7 @@ export default function SplashScreen() {
     return () => clearInterval(timer);
   }, []);
 
-  // Sync typed code lines with progress percentage
-  useEffect(() => {
-    const calculated = Math.min(fullCodeLines.length, Math.floor((progress / 100) * fullCodeLines.length) + 2);
-    setTypedLines(calculated);
-  }, [progress]);
+  const typedLines = Math.min(fullCodeLines.length, Math.floor((progress / 100) * fullCodeLines.length) + 2);
 
   const totalRegistered = eventState?.registrationCount ?? leaderboard?.length ?? 0;
   const round1Qualifiers = eventState?.round1QualifyCount ?? 30;
@@ -84,14 +79,18 @@ export default function SplashScreen() {
 
         {/* STATUS PILL BADGE */}
         <div className="status-pill-ready">
-          <span className="dot" />
-          <span>SYSTEM READY</span>
+          <span className={`dot ${isReady ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+          <span className="flex items-center gap-1.5">
+            {isReady && <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-spin" />}
+            <span>{isReady ? 'SYSTEM READY' : 'INITIALIZING CORE'}</span>
+          </span>
         </div>
 
         {/* BRAND TITLE & DESCRIPTIVE MODULE SUBTITLE */}
         <div className="space-y-2 max-w-xl text-center">
-          <h1 className="text-3xl sm:text-5xl font-black tracking-tight text-zinc-900 dark:text-white uppercase font-sans sm:font-mono drop-shadow-sm">
-            TECHNOVA COMPETITION PORTAL
+          <h1 className="text-3xl sm:text-5xl font-black tracking-tight text-zinc-900 dark:text-white uppercase font-sans sm:font-mono drop-shadow-sm flex items-center justify-center gap-2">
+            {isReady && <Sparkles className="w-8 h-8 text-[#D60303] animate-pulse hidden sm:inline-block" />}
+            <span>TECHNOVA COMPETITION PORTAL</span>
           </h1>
           <p className="text-xs sm:text-sm text-zinc-600 dark:text-zinc-400 font-medium leading-relaxed max-w-md mx-auto">
             Server authentication & participant access module. Enter your assigned User ID and Password to launch your workstation.

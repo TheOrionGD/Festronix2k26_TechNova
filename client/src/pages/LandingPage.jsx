@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useApp } from '../context/AppContext';
+import { useApp } from '../context/useApp';
 import { useScrollReveal, useAnimatedCounter } from '../hooks/useMotion';
 import {
   Code2,
@@ -137,6 +137,19 @@ export default function LandingPage() {
           </div>
         </div>
 
+
+        {/* Middle: Quick Jump Links */}
+        <div className="hidden md:flex items-center gap-4 text-xs font-mono font-bold text-zinc-600 dark:text-zinc-300">
+          <button onClick={() => scrollToSection('pipeline')} className="hover:text-[#D60303] transition cursor-pointer">
+            PIPELINE
+          </button>
+          <button onClick={() => scrollToSection('rules')} className="hover:text-[#D60303] transition cursor-pointer">
+            RULES
+          </button>
+          <button onClick={() => scrollToSection('faq')} className="hover:text-[#D60303] transition cursor-pointer">
+            FAQ
+          </button>
+        </div>
 
         {/* Right: Actions & Theme Toggle */}
         <div className="flex items-center gap-2.5">
@@ -347,7 +360,7 @@ export default function LandingPage() {
               </div>
               <div className="bg-white/40 dark:bg-zinc-950/40 p-3.5 rounded-lg border border-red-500/50 text-center space-y-1 card-hover-lift card-shimmer card-border-glow group">
                 <span className="text-[10px] font-mono text-zinc-400 dark:text-[#71717a] block">04 — STATUS</span>
-                <p className="text-[#D60303] font-mono font-bold text-xs uppercase pt-1 micro-hover-badge">{eventState?.status || 'REGISTRATION'}</p>
+                <p className="text-[#D60303] font-mono font-bold text-xs uppercase pt-1 micro-hover-badge">{eventState?.status}</p>
                 <span className="text-[10px] text-zinc-500 dark:text-[#a1a1aa] font-mono uppercase">ACTIVE PHASE</span>
               </div>
             </div>
@@ -442,13 +455,17 @@ export default function LandingPage() {
       {/* COMPETITION TIMELINE / PIPELINE */}
       <section
         id="pipeline"
-        ref={roundsRef}
-        className={`relative z-10 py-8 px-4 max-w-5xl mx-auto space-y-6 w-full reveal-init ${roundsVisible ? 'revealed' : ''}`}
+        ref={(node) => {
+          workflowRef(node);
+          roundsRef(node);
+        }}
+        className={`relative z-10 py-8 px-4 max-w-5xl mx-auto space-y-6 w-full reveal-init ${workflowVisible || roundsVisible ? 'revealed' : ''}`}
       >
         <div className="text-center space-y-1">
           <span className="text-xs font-mono font-bold text-[#D60303] uppercase tracking-widest">// SYSTEM PIPELINE</span>
-          <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-zinc-900 dark:text-white">
-            Competition Progression Pipeline
+          <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-zinc-900 dark:text-white flex items-center justify-center gap-2">
+            <Layers className="w-6 h-6 text-[#D60303]" />
+            <span>Competition Progression Pipeline</span>
           </h2>
           <p className="text-xs text-zinc-500 dark:text-[#a1a1aa] max-w-xl mx-auto font-normal">
             Merit-based qualification system calculated and verified dynamically.
@@ -458,7 +475,10 @@ export default function LandingPage() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 relative">
           {/* Pipeline Step 1 */}
           <div className="bg-white dark:bg-[#141417] p-5 rounded-xl border border-zinc-200 dark:border-[#27272a] space-y-3 relative card-hover-lift card-shimmer card-border-glow group shadow-2xs">
-            <span className="text-2xl font-black text-[#D60303] font-mono micro-hover-badge inline-block">01</span>
+            <div className="flex items-center justify-between">
+              <span className="text-2xl font-black text-[#D60303] font-mono micro-hover-badge inline-block">01</span>
+              <Users className="w-5 h-5 text-[#D60303] micro-hover-icon" />
+            </div>
             <div>
               <span className="text-[10px] font-mono font-bold text-zinc-400 dark:text-[#a1a1aa] uppercase tracking-widest block">STAGE 01</span>
               <h3 className="text-base font-bold text-zinc-900 dark:text-white">REGISTRATION</h3>
@@ -467,19 +487,25 @@ export default function LandingPage() {
               </p>
             </div>
             <div className="pt-3 border-t border-zinc-100 dark:border-[#27272a] text-[11px] font-mono text-zinc-600 dark:text-[#a1a1aa] space-y-1">
-              <span className="text-emerald-600 dark:text-[#22c55e] font-bold block">• ACTIVE ONBOARDING</span>
+              <span className="text-emerald-600 dark:text-[#22c55e] font-bold flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5" /> ACTIVE ONBOARDING
+              </span>
               <span>Team Size: 2 Members</span>
             </div>
           </div>
 
           {/* Pipeline Step 2 */}
           <div className="bg-white dark:bg-[#141417] p-5 rounded-xl border border-zinc-200 dark:border-[#27272a] space-y-3 relative card-hover-lift card-shimmer card-border-glow group shadow-2xs">
-            <span className="text-2xl font-black text-zinc-900 dark:text-white font-mono micro-hover-badge inline-block">02</span>
+            <div className="flex items-center justify-between">
+              <span className="text-2xl font-black text-zinc-900 dark:text-white font-mono micro-hover-badge inline-block">02</span>
+              <Brain className="w-5 h-5 text-[#D60303] micro-hover-icon" />
+            </div>
             <div>
               <span className="text-[10px] font-mono font-bold text-[#D60303] uppercase tracking-widest block">ROUND 01</span>
               <h3 className="text-base font-bold text-zinc-900 dark:text-white">TECH QUIZ</h3>
-              <p className="text-xs text-zinc-500 dark:text-[#71717a] mt-1 leading-relaxed">
-                20 randomized CS MCQs in 20 Mins. Real-time telemetry supervision.
+              <p className="text-xs text-zinc-500 dark:text-[#71717a] mt-1 leading-relaxed flex items-center gap-1">
+                <Clock className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                <span>20 randomized CS MCQs in 20 Mins. Real-time supervision.</span>
               </p>
             </div>
             <div className="pt-3 border-t border-zinc-100 dark:border-[#27272a] text-[11px] font-mono text-zinc-600 dark:text-[#a1a1aa] space-y-1">
@@ -490,12 +516,16 @@ export default function LandingPage() {
 
           {/* Pipeline Step 3 */}
           <div className="bg-white dark:bg-[#141417] p-5 rounded-xl border border-zinc-200 dark:border-[#27272a] space-y-3 relative card-hover-lift card-shimmer card-border-glow group shadow-2xs">
-            <span className="text-2xl font-black text-zinc-900 dark:text-white font-mono micro-hover-badge inline-block">03</span>
+            <div className="flex items-center justify-between">
+              <span className="text-2xl font-black text-zinc-900 dark:text-white font-mono micro-hover-badge inline-block">03</span>
+              <Code2 className="w-5 h-5 text-[#D60303] micro-hover-icon" />
+            </div>
             <div>
               <span className="text-[10px] font-mono font-bold text-[#D60303] uppercase tracking-widest block">ROUND 02</span>
               <h3 className="text-base font-bold text-zinc-900 dark:text-white">DEBUG IT</h3>
-              <p className="text-xs text-zinc-500 dark:text-[#71717a] mt-1 leading-relaxed">
-                Local VS Code execution & physical coordinator PIN verification.
+              <p className="text-xs text-zinc-500 dark:text-[#71717a] mt-1 leading-relaxed flex items-center gap-1">
+                <Terminal className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                <span>Local VS Code execution & coordinator PIN verification.</span>
               </p>
             </div>
             <div className="pt-3 border-t border-zinc-100 dark:border-[#27272a] text-[11px] font-mono text-zinc-600 dark:text-[#a1a1aa] space-y-1">
@@ -506,16 +536,22 @@ export default function LandingPage() {
 
           {/* Pipeline Step 4 */}
           <div className="bg-white dark:bg-[#141417] p-5 rounded-xl border border-zinc-200 dark:border-[#27272a] space-y-3 relative card-hover-lift card-shimmer card-border-glow group shadow-2xs">
-            <span className="text-2xl font-black text-zinc-900 dark:text-white font-mono micro-hover-badge inline-block">04</span>
+            <div className="flex items-center justify-between">
+              <span className="text-2xl font-black text-zinc-900 dark:text-white font-mono micro-hover-badge inline-block">04</span>
+              <Compass className="w-5 h-5 text-[#D60303] micro-hover-icon" />
+            </div>
             <div>
               <span className="text-[10px] font-mono font-bold text-[#D60303] uppercase tracking-widest block">FINALS</span>
               <h3 className="text-base font-bold text-zinc-900 dark:text-white">TECH HUNT</h3>
-              <p className="text-xs text-zinc-500 dark:text-[#71717a] mt-1 leading-relaxed">
-                Solve campus clue stations to reach the symposium podium.
+              <p className="text-xs text-zinc-500 dark:text-[#71717a] mt-1 leading-relaxed flex items-center gap-1">
+                <Globe className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                <span>Solve campus clue stations to reach the podium.</span>
               </p>
             </div>
             <div className="pt-3 border-t border-zinc-100 dark:border-[#27272a] text-[11px] font-mono text-zinc-600 dark:text-[#a1a1aa] space-y-1">
-              <span className="text-[#D60303] font-bold block">• SYMPOSIUM PODIUM</span>
+              <span className="text-[#D60303] font-bold flex items-center gap-1">
+                <Play className="w-3 h-3 text-[#D60303]" /> SYMPOSIUM PODIUM
+              </span>
               <span>Speed & Accuracy Scoring</span>
             </div>
           </div>
@@ -611,6 +647,51 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* LIVE SYMPOSIUM LEADERBOARD SECTION */}
+      <section
+        id="leaderboard"
+        ref={leaderboardRef}
+        className={`relative z-10 py-8 px-4 max-w-5xl mx-auto w-full space-y-4 reveal-init ${leaderboardVisible ? 'revealed' : ''}`}
+      >
+        <div className="text-center space-y-1">
+          <span className="text-xs font-mono font-bold text-[#D60303] uppercase tracking-widest">// LIVE STANDINGS</span>
+          <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-zinc-900 dark:text-white flex items-center justify-center gap-2">
+            <Trophy className="w-6 h-6 text-amber-500" />
+            <span>Leaderboard Telemetry</span>
+          </h2>
+          <p className="text-xs text-zinc-500 dark:text-[#a1a1aa] max-w-xl mx-auto font-normal">
+            Real-time merit rankings across all rounds based on score & completion timestamp.
+          </p>
+        </div>
+
+        {leaderboard && leaderboard.length > 0 ? (
+          <div className="bg-white dark:bg-[#141417] p-6 rounded-2xl border border-zinc-200 dark:border-[#27272a] shadow-sm font-mono text-xs overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-zinc-200 dark:border-zinc-800 text-zinc-400">
+                  <th className="py-2 px-3">RANK</th>
+                  <th className="py-2 px-3">PARTICIPANT ID</th>
+                  <th className="py-2 px-3">TOTAL SCORE</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/60">
+                {leaderboard.slice(0, 5).map((item, idx) => (
+                  <tr key={item.id || idx} className="hover:bg-zinc-50 dark:hover:bg-zinc-900/50 transition">
+                    <td className="py-2.5 px-3 font-bold text-[#D60303]">#{idx + 1}</td>
+                    <td className="py-2.5 px-3 font-medium text-zinc-900 dark:text-white">{item.name || item.id}</td>
+                    <td className="py-2.5 px-3 font-bold text-emerald-600 dark:text-emerald-400">{item.totalScore || 0} PTS</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="bg-white dark:bg-[#141417] p-8 rounded-2xl border border-zinc-200 dark:border-[#27272a] text-center text-xs text-zinc-500 font-mono">
+            Competition leaderboard initializing... Sign in to participate!
+          </div>
+        )}
+      </section>
+
       {/* FREQUENTLY ASKED QUESTIONS */}
       <section
         id="faq"
@@ -661,11 +742,14 @@ export default function LandingPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-4 text-xs font-mono text-zinc-500 dark:text-[#71717a]">
+          <div className="flex flex-col md:flex-row items-center gap-3 text-xs font-mono text-zinc-500 dark:text-[#71717a]">
             <span className="text-emerald-600 dark:text-[#22c55e] flex items-center gap-1.5 font-bold">
               <span className="w-2 h-2 rounded-full bg-emerald-500 dark:bg-[#22c55e] animate-ping" /> SYSTEM STATUS: ONLINE
             </span>
             <span>© 2026 TECHNOVA</span>
+            <span className="text-[10px] text-zinc-400/80 dark:text-zinc-600/80 font-normal select-none">
+              The system is built using Antigravity
+            </span>
           </div>
         </div>
       </footer>

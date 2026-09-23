@@ -35,7 +35,7 @@ const io = new Server(server, {
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
-const MONGODB_URI = process.env.DATABASE_URL || process.env.MONGODB_URI || '';
+const MONGODB_URI = process.env.DATABASE_URL ?? process.env.MONGODB_URI;
 let isDbConnected = false;
 
 import fs from 'fs';
@@ -180,10 +180,10 @@ function secureShuffle(array) {
 }
 
 // Helper: Record Audit Log
-async function createAuditLog(userId, role, action, targetId = '', metadata = {}) {
+async function createAuditLog(userId = 'SYSTEM', role = 'SYSTEM', action = '', targetId = '', metadata = {}) {
   const logEntry = {
-    userId: userId || 'SYSTEM',
-    role: role || 'SYSTEM',
+    userId,
+    role,
     action,
     targetId: String(targetId),
     metadata,
@@ -220,7 +220,7 @@ async function getEventState() {
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'technova_secret_symposium_key_2026';
+const JWT_SECRET = process.env.JWT_SECRET;
 
 // GET List of Colleges for Dropdowns
 app.get('/api/colleges', async (req, res) => {
@@ -269,7 +269,7 @@ app.post('/api/colleges', async (req, res) => {
 // Rate Limiter for Login Endpoint (200 requests per minute per IP to support shared lab network IPs)
 const loginRateLimitMap = new Map();
 function rateLimitLogin(req, res, next) {
-  const ip = req.ip || req.headers['x-forwarded-for'] || '127.0.0.1';
+  const ip = req.ip ?? req.headers['x-forwarded-for'];
   const now = Date.now();
   const windowMs = 60 * 1000;
   const maxAttempts = 200;
@@ -364,12 +364,12 @@ app.post('/api/admin/coordinators', async (req, res) => {
       id: coordId,
       name,
       email: email.toLowerCase().trim(),
-      college: college || 'K. Ramakrishnan College of Technology',
-      department: department || 'CSE',
+      college,
+      department,
       role: 'COORDINATOR',
       password: hashedPassword,
-      pin: pin || '1234',
-      assignedRound: assignedRound || 'Round 2',
+      pin,
+      assignedRound,
       permissions: ['VERIFY_DEBUG', 'MANAGE_QUESTIONS'],
       accountStatus: 'ACTIVE'
     };
@@ -499,9 +499,9 @@ app.post('/api/coordinator/participants', async (req, res) => {
       id: participantId,
       name,
       email: email.toLowerCase().trim(),
-      college: college || 'K. Ramakrishnan College of Technology',
-      department: department || 'CSE',
-      year: year || 'III',
+      college,
+      department,
+      year,
       role: 'PARTICIPANT',
       password: hashedPassword,
       accountStatus: 'ACTIVE'
@@ -561,9 +561,9 @@ app.post('/api/coordinator/participants/bulk', async (req, res) => {
         id: pid,
         name: p.name,
         email: String(p.email).toLowerCase().trim(),
-        college: p.college || 'K. Ramakrishnan College of Technology',
-        department: p.department || 'CSE',
-        year: p.year || 'III',
+        college: p.college,
+        department: p.department,
+        year: p.year,
         role: 'PARTICIPANT',
         password: hashedPassword,
         accountStatus: 'ACTIVE'
@@ -684,8 +684,8 @@ app.get('/api/event/status', async (req, res) => {
 // Single Secure Authentication Endpoint (User ID + Password -> JWT Token + Role Authorization)
 app.post('/api/auth/login', rateLimitLogin, async (req, res) => {
   const { id, userId, password, email } = req.body;
-  const inputId = (id || userId || email || '').trim();
-  const cleanPassword = (password || '').trim();
+  const inputId = String(id ?? userId ?? email ?? '').trim();
+  const cleanPassword = String(password ?? '').trim();
 
   if (!inputId || !cleanPassword) {
     return res.status(400).json({ success: false, message: 'User ID and Password are required.' });
@@ -760,11 +760,11 @@ app.post('/api/auth/login', rateLimitLogin, async (req, res) => {
         id: user.id,
         name: user.name,
         email: user.email,
-        college: user.college || '',
-        department: user.department || '',
-        year: user.year || '',
+        college: user.college,
+        department: user.department,
+        year: user.year,
         role: user.role,
-        assignedRound: user.assignedRound || '',
+        assignedRound: user.assignedRound,
         permissions: user.permissions || []
       }
     });
@@ -795,9 +795,9 @@ app.post('/api/auth/register', async (req, res) => {
       id: participantId,
       name,
       email: email.toLowerCase().trim(),
-      college: college || '',
-      department: department || '',
-      year: year || '',
+      college,
+      department,
+      year,
       role: 'PARTICIPANT',
       password: hashedPassword,
       accountStatus: 'ACTIVE'
@@ -910,7 +910,7 @@ app.get('/api/leaderboard', async (req, res) => {
       return {
         id: p.id,
         name: p.name,
-        college: p.college || 'N/A',
+        college: p.college,
         r1: r1Score,
         r2: r2Score,
         r3: r3Score,
@@ -953,7 +953,7 @@ app.get('/api/admin/questions', async (req, res) => {
       filtered = filtered.filter(q => q.difficulty.toUpperCase() === difficulty.toUpperCase());
     }
     if (status && status !== 'ALL') {
-      filtered = filtered.filter(q => (q.status || 'ACTIVE').toUpperCase() === status.toUpperCase());
+      filtered = filtered.filter(q => q.status?.toUpperCase() === status.toUpperCase());
     }
     if (search) {
       const qLower = search.toLowerCase();
@@ -1002,16 +1002,16 @@ app.post('/api/admin/questions', async (req, res) => {
       questionId,
       id: questionId,
       questionText,
-      category: category || 'General CS',
-      difficulty: (difficulty || 'MEDIUM').toUpperCase(),
+      category,
+      difficulty: difficulty?.toUpperCase(),
       options: options.map(o => String(o).trim()),
       correctOption: parseInt(correctOption),
       marks: 1,
-      explanation: explanation || '',
+      explanation,
       tags: tags || [],
-      status: status || 'ACTIVE',
-      createdBy: createdBy || 'ADMIN',
-      updatedBy: createdBy || 'ADMIN',
+      status,
+      createdBy,
+      updatedBy,
       createdAt: new Date(),
       updatedAt: new Date()
     };
@@ -1022,7 +1022,7 @@ app.post('/api/admin/questions', async (req, res) => {
       memoryStore.questions.push(newQ);
     }
 
-    await createAuditLog(createdBy || 'ADMIN', 'ADMIN', 'QUESTION_CREATED', questionId, { category, difficulty });
+    await createAuditLog(createdBy, 'ADMIN', 'QUESTION_CREATED', questionId, { category, difficulty });
 
     res.json({ success: true, question: newQ, warning });
   } catch (err) {
@@ -1056,7 +1056,7 @@ app.put('/api/admin/questions/:id', async (req, res) => {
       return res.status(404).json({ success: false, message: `Question ${id} not found.` });
     }
 
-    await createAuditLog(updates.updatedBy || 'ADMIN', 'ADMIN', 'QUESTION_UPDATED', id, { updates });
+    await createAuditLog(updates.updatedBy, 'ADMIN', 'QUESTION_UPDATED', id, { updates });
     res.json({ success: true, question: updatedQ });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -1095,16 +1095,16 @@ app.post('/api/admin/questions/import', async (req, res) => {
         questionId: qId,
         id: qId,
         questionText: q.questionText,
-        category: q.category || 'General CS',
-        difficulty: (q.difficulty || 'MEDIUM').toUpperCase(),
+        category: q.category,
+        difficulty: q.difficulty?.toUpperCase(),
         options: q.options,
         correctOption: q.correctOption !== undefined ? parseInt(q.correctOption) : 0,
         marks: q.marks || 1,
-        explanation: q.explanation || '',
+        explanation: q.explanation,
         tags: q.tags || [],
-        status: q.status || 'ACTIVE',
-        createdBy: importedBy || 'ADMIN',
-        updatedBy: importedBy || 'ADMIN',
+        status: q.status,
+        createdBy: importedBy,
+        updatedBy: importedBy,
         createdAt: new Date(),
         updatedAt: new Date()
       };
@@ -1119,7 +1119,7 @@ app.post('/api/admin/questions/import', async (req, res) => {
       importedCount++;
     }
 
-    await createAuditLog(importedBy || 'ADMIN', 'ADMIN', 'QUESTIONS_BULK_IMPORTED', '', { importedCount });
+    await createAuditLog(importedBy, 'ADMIN', 'QUESTIONS_BULK_IMPORTED', '', { importedCount });
     res.json({ success: true, importedCount, message: `Successfully imported ${importedCount} questions.` });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -1159,7 +1159,7 @@ app.post('/api/quiz/start', async (req, res) => {
     if (isDbConnected) {
       activeQuestions = await Question.find({ status: 'ACTIVE' });
     } else {
-      activeQuestions = memoryStore.questions.filter(q => (q.status || 'ACTIVE') === 'ACTIVE');
+      activeQuestions = memoryStore.questions.filter(q => q.status === 'ACTIVE');
     }
 
     // 2. Validate content count
@@ -1183,7 +1183,7 @@ app.post('/api/quiz/start', async (req, res) => {
       const sanitizedQuestions = existingAttempt.selectedQuestions.map((sq, idx) => ({
         questionId: sq.questionId,
         position: idx + 1,
-        questionText: (activeQuestions.find(q => q.questionId === sq.questionId) || {}).questionText || '',
+        questionText: (activeQuestions.find(q => q.questionId === sq.questionId))?.questionText,
         options: sq.options,
         marks: 1,
         questionNumber: idx + 1,
@@ -1293,7 +1293,7 @@ app.get('/api/quiz/current', async (req, res) => {
     const sanitizedQuestions = attempt.selectedQuestions.map((sq, idx) => ({
       questionId: sq.questionId,
       position: idx + 1,
-      questionText: (activeQuestions.find(q => q.questionId === sq.questionId || q.id === sq.questionId) || {}).questionText || '',
+      questionText: (activeQuestions.find(q => q.questionId === sq.questionId || q.id === sq.questionId))?.questionText,
       options: sq.options,
       marks: 1,
       questionNumber: idx + 1,
@@ -1436,7 +1436,7 @@ app.get('/api/admin/debug-problems', async (req, res) => {
       filtered = filtered.filter(p => p.difficulty.toUpperCase() === difficulty.toUpperCase());
     }
     if (status && status !== 'ALL') {
-      filtered = filtered.filter(p => (p.status || 'ACTIVE').toUpperCase() === status.toUpperCase());
+      filtered = filtered.filter(p => p.status?.toUpperCase() === status.toUpperCase());
     }
     if (search) {
       const qLower = search.toLowerCase();
@@ -1476,17 +1476,17 @@ app.post('/api/admin/debug-problems', async (req, res) => {
       id: problemId,
       title,
       description,
-      language: language || 'Python',
-      difficulty: (difficulty || 'MEDIUM').toUpperCase(),
+      language,
+      difficulty: difficulty?.toUpperCase(),
       brokenCode,
       expectedOutput,
-      solutionSnippet: solutionSnippet || '',
+      solutionSnippet,
       marks: marks ? parseInt(marks) : 10,
-      category: category || 'Logic',
+      category,
       tags: tags || [],
-      status: status || 'ACTIVE',
-      createdBy: createdBy || 'ADMIN',
-      updatedBy: createdBy || 'ADMIN',
+      status,
+      createdBy,
+      updatedBy,
       createdAt: new Date(),
       updatedAt: new Date()
     };
@@ -1497,7 +1497,7 @@ app.post('/api/admin/debug-problems', async (req, res) => {
       memoryStore.debugProblems.push(newProblem);
     }
 
-    await createAuditLog(createdBy || 'ADMIN', 'ADMIN', 'DEBUG_PROBLEM_CREATED', problemId, { title });
+    await createAuditLog(createdBy, 'ADMIN', 'DEBUG_PROBLEM_CREATED', problemId, { title });
     res.json({ success: true, problem: newProblem, warning });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -1526,7 +1526,7 @@ app.put('/api/admin/debug-problems/:id', async (req, res) => {
       }
     }
 
-    await createAuditLog(updates.updatedBy || 'ADMIN', 'ADMIN', 'DEBUG_PROBLEM_UPDATED', id);
+    await createAuditLog(updates.updatedBy, 'ADMIN', 'DEBUG_PROBLEM_UPDATED', id);
     res.json({ success: true, problem: updated });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -1562,18 +1562,18 @@ app.post('/api/admin/debug-problems/import', async (req, res) => {
         problemId: parseInt(pId),
         id: parseInt(pId),
         title: p.title,
-        description: p.description || '',
-        language: p.language || 'Python',
-        difficulty: (p.difficulty || 'MEDIUM').toUpperCase(),
+        description: p.description,
+        language: p.language,
+        difficulty: p.difficulty?.toUpperCase(),
         brokenCode: p.brokenCode,
-        expectedOutput: p.expectedOutput || '',
-        solutionSnippet: p.solutionSnippet || '',
+        expectedOutput: p.expectedOutput,
+        solutionSnippet: p.solutionSnippet,
         marks: p.marks ? parseInt(p.marks) : 10,
-        category: p.category || 'Logic',
+        category: p.category,
         tags: p.tags || [],
-        status: p.status || 'ACTIVE',
-        createdBy: importedBy || 'ADMIN',
-        updatedBy: importedBy || 'ADMIN',
+        status: p.status,
+        createdBy: importedBy,
+        updatedBy: importedBy,
         createdAt: new Date(),
         updatedAt: new Date()
       };
@@ -1616,7 +1616,7 @@ app.post('/api/debug/start', async (req, res) => {
   try {
     let activeProblems = [];
     if (isDbConnected) activeProblems = await DebugProblem.find({ status: 'ACTIVE' });
-    else activeProblems = memoryStore.debugProblems.filter(p => (p.status || 'ACTIVE') === 'ACTIVE');
+    else activeProblems = memoryStore.debugProblems.filter(p => p.status === 'ACTIVE');
 
     if (activeProblems.length < 3) {
       return res.status(400).json({
@@ -1634,9 +1634,9 @@ app.post('/api/debug/start', async (req, res) => {
       selectedProblems = activeProblems.filter(p => existingAttempt.selectedProblemIds.includes(p.problemId || p.id));
     } else {
       // Pick 1 C problem, 1 Python problem, 1 Java problem, and 1 Bonus problem
-      const cProbs = secureShuffle(activeProblems.filter(p => (p.language || '').toUpperCase() === 'C'));
-      const pyProbs = secureShuffle(activeProblems.filter(p => (p.language || '').toUpperCase() === 'PYTHON'));
-      const javaProbs = secureShuffle(activeProblems.filter(p => (p.language || '').toUpperCase() === 'JAVA'));
+      const cProbs = secureShuffle(activeProblems.filter(p => p.language?.toUpperCase() === 'C'));
+      const pyProbs = secureShuffle(activeProblems.filter(p => p.language?.toUpperCase() === 'PYTHON'));
+      const javaProbs = secureShuffle(activeProblems.filter(p => p.language?.toUpperCase() === 'JAVA'));
       const bonusProbs = secureShuffle(activeProblems.filter(p => p.isBonus || (p.marks === 0)));
 
       const picked = [];
@@ -1835,7 +1835,7 @@ app.get('/api/admin/clues', async (req, res) => {
       filtered = filtered.filter(c => c.category.toLowerCase() === category.toLowerCase());
     }
     if (status && status !== 'ALL') {
-      filtered = filtered.filter(c => (c.status || 'ACTIVE').toUpperCase() === status.toUpperCase());
+      filtered = filtered.filter(c => c.status?.toUpperCase() === status.toUpperCase());
     }
     if (search) {
       const qLower = search.toLowerCase();
@@ -1871,17 +1871,17 @@ app.post('/api/admin/clues', async (req, res) => {
       clueId,
       id: clueId,
       station: parseInt(station),
-      category: category || 'Cybersecurity',
+      category,
       title,
       clueText,
       answer: String(answer).trim(),
-      hint: hint || '',
+      hint,
       hintPenalty: hintPenalty ? parseInt(hintPenalty) : 2,
       marks: marks ? parseInt(marks) : 10,
       order: order ? parseInt(order) : 1,
-      status: status || 'ACTIVE',
-      createdBy: createdBy || 'ADMIN',
-      updatedBy: createdBy || 'ADMIN',
+      status,
+      createdBy,
+      updatedBy,
       createdAt: new Date(),
       updatedAt: new Date()
     };
@@ -1889,7 +1889,7 @@ app.post('/api/admin/clues', async (req, res) => {
     if (isDbConnected) await TechClue.create(newClue);
     else memoryStore.techClues.push(newClue);
 
-    await createAuditLog(createdBy || 'ADMIN', 'ADMIN', 'CLUE_CREATED', clueId, { title });
+    await createAuditLog(createdBy, 'ADMIN', 'CLUE_CREATED', clueId, { title });
     res.json({ success: true, clue: newClue, warning });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -1918,7 +1918,7 @@ app.put('/api/admin/clues/:id', async (req, res) => {
       }
     }
 
-    await createAuditLog(updates.updatedBy || 'ADMIN', 'ADMIN', 'CLUE_UPDATED', id);
+    await createAuditLog(updates.updatedBy, 'ADMIN', 'CLUE_UPDATED', id);
     res.json({ success: true, clue: updated });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -1954,17 +1954,17 @@ app.post('/api/admin/clues/import', async (req, res) => {
         clueId: parseInt(cId),
         id: parseInt(cId),
         station: parseInt(c.station || 1),
-        category: c.category || 'General',
+        category: c.category,
         title: c.title,
         clueText: c.clueText,
         answer: String(c.answer).trim(),
-        hint: c.hint || '',
+        hint: c.hint,
         hintPenalty: c.hintPenalty ? parseInt(c.hintPenalty) : 2,
         marks: c.marks ? parseInt(c.marks) : 10,
         order: c.order ? parseInt(c.order) : 1,
-        status: c.status || 'ACTIVE',
-        createdBy: importedBy || 'ADMIN',
-        updatedBy: importedBy || 'ADMIN',
+        status: c.status,
+        createdBy: importedBy,
+        updatedBy: importedBy,
         createdAt: new Date(),
         updatedAt: new Date()
       };
@@ -2007,7 +2007,7 @@ app.post('/api/hunt/start', async (req, res) => {
   try {
     let activeClues = [];
     if (isDbConnected) activeClues = await TechClue.find({ status: 'ACTIVE' }).sort({ station: 1, order: 1 });
-    else activeClues = memoryStore.techClues.filter(c => (c.status || 'ACTIVE') === 'ACTIVE').sort((a, b) => a.station - b.station);
+    else activeClues = memoryStore.techClues.filter(c => c.status === 'ACTIVE').sort((a, b) => a.station - b.station);
 
     if (activeClues.length < 5) {
       return res.status(400).json({
@@ -2062,7 +2062,7 @@ app.post('/api/hunt/start', async (req, res) => {
         station: targetClue.station,
         category: targetClue.category,
         title: targetClue.title,
-        clueText: targetClue.clueText || targetClue.description,
+        clueText: targetClue.clueText ?? targetClue.description,
         marks: targetClue.marks || 10,
         hasHint: Boolean(targetClue.hint),
         hint: existingAttempt.hintsUsed[targetClue.clueId || targetClue.id] ? targetClue.hint : null
@@ -2113,7 +2113,7 @@ app.get('/api/hunt/current', async (req, res) => {
         station: targetClue.station,
         category: targetClue.category,
         title: targetClue.title,
-        clueText: targetClue.clueText || targetClue.description,
+        clueText: targetClue.clueText ?? targetClue.description,
         marks: targetClue.marks || 10,
         hasHint: Boolean(targetClue.hint),
         hint: hintsMap[targetClue.clueId || targetClue.id] ? targetClue.hint : null
@@ -2234,7 +2234,7 @@ app.post('/api/announcements', async (req, res) => {
     if (isDbConnected) count = await Announcement.countDocuments();
     else count = memoryStore.announcements.length;
 
-    const newA = { id: count + 1, title, message, tag: tag || 'General', time: 'Just now' };
+    const newA = { id: count + 1, title, message, tag, time: 'Just now' };
 
     if (isDbConnected) await Announcement.create(newA);
     else memoryStore.announcements.push(newA);
@@ -2266,9 +2266,9 @@ app.post('/api/anticheat/log', async (req, res) => {
 
     const log = {
       id: count + 1,
-      participantId: participantId || 'UNKNOWN',
-      type: type || 'TAB_BLUR',
-      message: message || 'Browser tab switched',
+      participantId,
+      type,
+      message,
       timestamp: new Date().toLocaleTimeString()
     };
 
@@ -2299,7 +2299,7 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {});
 });
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT ?? 5000;
 server.listen(PORT, () => {
   console.log(`TECHNOVA Data Server running on port ${PORT}`);
 });

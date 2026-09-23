@@ -1,5 +1,5 @@
 import React from 'react';
-import { useApp } from '../context/AppContext';
+import { useApp } from '../context/useApp';
 import { Bell, Copy, Shield, LogOut, Sun, Moon } from 'lucide-react';
 
 export default function Header() {
@@ -143,7 +143,7 @@ export default function Header() {
         {currentUser ? (
           <div className="flex items-center gap-3 pl-3 border-l border-red-500/40">
             <div className="w-9 h-9 rounded-full bg-white dark:bg-[#141417] border border-red-500/60 flex items-center justify-center shadow-xs transition-transform hover:scale-105 overflow-hidden p-0.5" title={currentUser.name}>
-              <img src="/technova_icon.jpg" alt={currentUser.name || 'User Profile'} className="w-full h-full object-cover rounded-full" />
+              <img src="/technova_icon.jpg" alt={currentUser.name} className="w-full h-full object-cover rounded-full" />
             </div>
             <div className="text-left hidden sm:block">
               <p className="text-xs font-semibold text-zinc-900 dark:text-white">{currentUser.name}</p>
