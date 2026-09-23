@@ -51,11 +51,11 @@ export default function Sidebar() {
   ];
 
   return (
-    <aside className="w-64 bg-[#EFEEEA] border-r border-[#595959]/30 flex flex-col justify-between h-[calc(100vh-4rem)] sticky top-16 select-none shrink-0 text-[#595959] transition-all duration-200">
+    <aside className="w-64 bg-white/40 dark:bg-zinc-900/50 backdrop-blur-md border-r border-red-500/50 flex flex-col justify-between h-[calc(100vh-4rem)] sticky top-16 select-none shrink-0 text-[#595959] dark:text-[#a1a1aa] transition-colors duration-200">
       <div className="p-4 space-y-6">
         {/* Main Navigation */}
         <div className="space-y-1">
-          <p className="px-3 text-[11px] font-bold text-[#595959]/70 uppercase tracking-wider mb-2">Main Navigation</p>
+          <p className="px-3 text-[11px] font-bold text-red-600 dark:text-red-400 uppercase tracking-wider mb-2 font-mono">Main Navigation</p>
           {navItems.map(item => {
             const Icon = item.icon;
             const isActive = currentScreen === item.targetScreen;
@@ -64,27 +64,25 @@ export default function Sidebar() {
               <button
                 key={item.id}
                 onClick={() => setCurrentScreen(item.targetScreen)}
-                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 group cursor-pointer ${isActive
-                    ? 'bg-[#D60303] text-[#EFEEEA] shadow-md transform translate-x-1'
-                    : 'text-[#595959] hover:bg-[#595959]/10 hover:translate-x-1 border border-transparent'
-                  }`}
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 group cursor-pointer border ${
+                  isActive
+                    ? 'bg-[#D60303] text-white border-red-400 shadow-md transform translate-x-1'
+                    : 'bg-[#D60303] text-white border-red-500/70 hover:bg-[#A30B1A] hover:translate-x-1'
+                }`}
               >
                 <div className="flex items-center gap-3">
-                  <Icon className={`w-4 h-4 transition-transform duration-200 group-hover:scale-110 ${isActive ? 'text-[#EFEEEA]' :
-                      item.status === 'completed' ? 'text-[#A30B1A]' :
-                        item.status === 'active' ? 'text-[#D60303]' : 'text-[#595959]'
-                    }`} />
-                  <span>{item.label}</span>
+                  <Icon className="w-4 h-4 text-white transition-transform duration-200 group-hover:scale-110" />
+                  <span className="text-white">{item.label}</span>
                 </div>
 
                 {item.status === 'completed' && (
-                  <CheckCircle2 className={`w-4 h-4 ${isActive ? 'text-[#EFEEEA]' : 'text-[#A30B1A]'}`} />
+                  <CheckCircle2 className="w-4 h-4 text-white" />
                 )}
                 {item.status === 'active' && (
-                  <span className={`w-2 h-2 rounded-full ${isActive ? 'bg-[#EFEEEA]' : 'bg-[#D60303]'} animate-ping`}></span>
+                  <span className="w-2 h-2 rounded-full bg-white animate-ping"></span>
                 )}
                 {item.status === 'locked' && (
-                  <Lock className={`w-3.5 h-3.5 ${isActive ? 'text-[#EFEEEA]' : 'text-[#595959]'}`} />
+                  <Lock className="w-3.5 h-3.5 text-white" />
                 )}
               </button>
             );
@@ -92,8 +90,8 @@ export default function Sidebar() {
         </div>
 
         {/* Portals & Secondary */}
-        <div className="space-y-1 pt-4 border-t border-[#595959]/20">
-          <p className="px-3 text-[11px] font-bold text-[#595959]/70 uppercase tracking-wider mb-2">System Portals</p>
+        <div className="space-y-1 pt-4 border-t border-red-500/40">
+          <p className="px-3 text-[11px] font-bold text-red-600 dark:text-red-400 uppercase tracking-wider mb-2 font-mono">System Portals</p>
           {secondaryNavItems.map(item => {
             const Icon = item.icon;
             if (item.role && currentUser?.role !== item.role && currentUser?.role !== 'ADMIN') {
@@ -105,18 +103,18 @@ export default function Sidebar() {
               <button
                 key={item.id}
                 onClick={() => setCurrentScreen(item.targetScreen)}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-200 cursor-pointer ${isActive
-                    ? 'bg-[#A30B1A] text-[#EFEEEA] transform translate-x-1'
-                    : 'text-[#595959] hover:bg-[#595959]/10 hover:translate-x-1'
-                  }`}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-200 cursor-pointer border ${
+                  isActive
+                    ? 'bg-[#A30B1A] text-white border-red-400 transform translate-x-1'
+                    : 'bg-[#D60303] text-white border-red-500/70 hover:bg-[#A30B1A] hover:translate-x-1'
+                }`}
               >
                 <div className="flex items-center gap-3">
-                  <Icon className={`w-4 h-4 ${isActive ? 'text-[#EFEEEA]' : 'text-[#595959]'}`} />
-                  <span>{item.label}</span>
+                  <Icon className="w-4 h-4 text-white" />
+                  <span className="text-white">{item.label}</span>
                 </div>
                 {item.role && (
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-bold ${isActive ? 'bg-[#EFEEEA] text-[#A30B1A]' : 'bg-[#A30B1A] text-[#EFEEEA]'
-                    }`}>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded font-mono font-bold bg-white text-[#D60303]">
                     {item.role}
                   </span>
                 )}
@@ -127,7 +125,7 @@ export default function Sidebar() {
       </div>
 
       {/* Footer Branding Graphic */}
-      <div className="p-4 border-t border-[#595959]/20 bg-[#595959]/5 relative overflow-hidden">
+      <div className="p-4 border-t border-[#595959]/20 dark:border-[#27272a] bg-[#595959]/5 dark:bg-[#141417]/50 relative overflow-hidden">
         <svg className="absolute bottom-0 left-0 opacity-15 w-full h-16 text-[#D60303] animate-pulse-glow" viewBox="0 0 100 40" fill="none">
           <path d="M0 30 H30 L45 15 H80 L100 35" stroke="currentColor" strokeWidth="1.5" strokeDasharray="3 3" />
           <circle cx="45" cy="15" r="2.5" fill="currentColor" />
@@ -135,10 +133,10 @@ export default function Sidebar() {
         </svg>
 
         <div className="relative z-10">
-          <p className="text-[11px] font-bold text-[#595959] tracking-wider">
+          <p className="text-[11px] font-bold text-[#595959] dark:text-[#a1a1aa] tracking-wider">
             Decode <span className="text-[#D60303]">•</span> Debug <span className="text-[#D60303]">•</span> Discover
           </p>
-          <p className="text-[10px] font-black text-[#A30B1A] tracking-widest mt-0.5 uppercase">
+          <p className="text-[10px] font-black text-[#A30B1A] dark:text-[#ef4444] tracking-widest mt-0.5 uppercase font-mono">
             TECHNOVA 2026
           </p>
         </div>

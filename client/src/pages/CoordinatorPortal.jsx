@@ -254,41 +254,41 @@ export default function CoordinatorPortal() {
   };
 
   return (
-    <div className="min-h-screen bg-[#EFEEEA] text-[#595959] flex flex-col">
+    <div className="min-h-screen bg-transparent text-[#595959] dark:text-[#f4f4f5] flex flex-col transition-colors duration-200">
       <Header />
 
       <div className="flex flex-1">
         <Sidebar />
 
-        <main className="flex-1 p-6 overflow-y-auto max-w-7xl mx-auto space-y-6 animate-hero-entrance">
+        <main className="flex-1 p-6 space-y-6 max-w-7xl mx-auto w-full min-w-0 animate-hero-entrance">
           {/* Header */}
-          <div className="bg-[#EFEEEA] p-6 rounded-2xl border border-[#595959] shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4 card-hover-lift">
+          <div className="bg-white/80 dark:bg-[#141417]/80 backdrop-blur-md p-6 rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4 card-hover-lift">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-xl bg-[#D60303]/10 text-[#D60303] flex items-center justify-center font-bold">
                 <ShieldCheck className="w-7 h-7 text-[#D60303]" />
               </div>
               <div>
-                <span className="text-[10px] font-mono font-bold text-[#A30B1A] uppercase tracking-widest">COORDINATOR CONTROL CENTER</span>
-                <h2 className="text-xl font-bold text-[#A30B1A]">TECHNOVA CONTENT & VERIFICATION WORKSPACE</h2>
-                <p className="text-xs text-[#595959] font-medium">Manage competition participants, questions, and physical lab terminal verification.</p>
+                <span className="text-[10px] font-mono font-bold text-[#D60303] uppercase tracking-widest">COORDINATOR CONTROL CENTER</span>
+                <h2 className="text-xl font-bold text-zinc-900 dark:text-white">TECHNOVA CONTENT & VERIFICATION WORKSPACE</h2>
+                <p className="text-xs text-zinc-600 dark:text-[#a1a1aa] font-medium">Manage competition participants, questions, and physical lab terminal verification.</p>
               </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
-              <span className="px-3 py-1 rounded-full bg-[#595959] text-[#EFEEEA] font-bold shadow-2xs">
+              <span className="px-3 py-1 rounded-full bg-zinc-800 text-white font-bold shadow-2xs">
                 STATION: {currentUser?.assignedRound || 'Lab Terminal'}
               </span>
-              <span className="px-3 py-1 rounded-full bg-[#A30B1A] text-[#EFEEEA] font-bold shadow-2xs">
+              <span className="px-3 py-1 rounded-full bg-[#A30B1A] text-white font-bold shadow-2xs">
                 COORD: {currentUser?.id || 'COORDINATOR'} ({myAllocatedCount} Assigned)
               </span>
             </div>
           </div>
 
           {/* Navigation Tabs */}
-          <div className="flex flex-wrap items-center gap-2 border-b border-[#595959]/20 pb-2 text-xs font-bold">
+          <div className="flex flex-wrap items-center gap-2 border-b border-zinc-200 dark:border-[#27272a] pb-2 text-xs font-bold">
             <button
               onClick={() => setActiveTab('verification')}
-              className={`px-4 py-2 rounded-xl transition-all duration-200 flex items-center gap-2 cursor-pointer btn-interactive ${activeTab === 'verification' ? 'bg-[#D60303] text-[#EFEEEA] shadow-xs' : 'bg-[#EFEEEA] border border-[#595959] text-[#595959] hover:bg-[#595959]/10'
+              className={`px-4 py-2 rounded-xl transition-all duration-200 flex items-center gap-2 cursor-pointer btn-interactive ${activeTab === 'verification' ? 'bg-[#D60303] text-white shadow-xs' : 'bg-white/80 dark:bg-[#141417]/80 border border-zinc-200 dark:border-[#27272a] text-zinc-700 dark:text-[#a1a1aa] hover:bg-zinc-100 dark:hover:bg-[#1a1a1e]'
                 }`}
             >
               <CheckSquare className="w-4 h-4" />
@@ -297,7 +297,7 @@ export default function CoordinatorPortal() {
 
             <button
               onClick={() => setActiveTab('participants')}
-              className={`px-4 py-2 rounded-xl transition-all duration-200 flex items-center gap-2 cursor-pointer btn-interactive ${activeTab === 'participants' ? 'bg-[#D60303] text-[#EFEEEA] shadow-xs' : 'bg-[#EFEEEA] border border-[#595959] text-[#595959] hover:bg-[#595959]/10'
+              className={`px-4 py-2 rounded-xl transition-all duration-200 flex items-center gap-2 cursor-pointer btn-interactive ${activeTab === 'participants' ? 'bg-[#D60303] text-white shadow-xs' : 'bg-white/80 dark:bg-[#141417]/80 border border-zinc-200 dark:border-[#27272a] text-zinc-700 dark:text-[#a1a1aa] hover:bg-zinc-100 dark:hover:bg-[#1a1a1e]'
                 }`}
             >
               <Users className="w-4 h-4" />
@@ -306,7 +306,7 @@ export default function CoordinatorPortal() {
 
             <button
               onClick={() => setActiveTab('content')}
-              className={`px-4 py-2 rounded-xl transition-all duration-200 flex items-center gap-2 cursor-pointer btn-interactive ${activeTab === 'content' ? 'bg-[#D60303] text-[#EFEEEA] shadow-xs' : 'bg-[#EFEEEA] border border-[#595959] text-[#595959] hover:bg-[#595959]/10'
+              className={`px-4 py-2 rounded-xl transition-all duration-200 flex items-center gap-2 cursor-pointer btn-interactive ${activeTab === 'content' ? 'bg-[#D60303] text-white shadow-xs' : 'bg-white/80 dark:bg-[#141417]/80 border border-zinc-200 dark:border-[#27272a] text-zinc-700 dark:text-[#a1a1aa] hover:bg-zinc-100 dark:hover:bg-[#1a1a1e]'
                 }`}
             >
               <Database className="w-4 h-4" />
@@ -316,8 +316,8 @@ export default function CoordinatorPortal() {
 
           {/* Tab 1: Physical Verification Queue */}
           {activeTab === 'verification' && (
-            <div className="bg-[#EFEEEA] p-6 rounded-2xl border border-[#595959] shadow-sm space-y-4 card-hover-lift animate-slide-up">
-              <h3 className="text-base font-bold text-[#A30B1A]">Round 2 Solution Verification Queue</h3>
+            <div className="bg-white/80 dark:bg-[#141417]/80 backdrop-blur-md p-6 rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80 shadow-sm space-y-4 card-hover-lift animate-slide-up">
+              <h3 className="text-base font-bold text-zinc-900 dark:text-white">Round 2 Solution Verification Queue</h3>
 
               {isLoading ? (
                 <p className="text-xs text-[#595959] py-6 text-center font-medium">Loading verification queue...</p>

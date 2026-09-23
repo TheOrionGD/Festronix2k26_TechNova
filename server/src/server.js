@@ -55,7 +55,7 @@ async function connectDatabase() {
 }
 connectDatabase();
 
-// In-Memory Fallback Data Store (Initialized with seeded data or empty fallback)
+// In-Memory Fallback Data Store (Initialized empty)
 const memoryStore = {
   eventState: {
     status: 'REGISTRATION', // REGISTRATION | ROUND_1_READY | ROUND_1_RUNNING | ROUND_1_ENDED | ROUND_2_READY | ROUND_2_RUNNING | ROUND_2_ENDED | ROUND_3_READY | ROUND_3_RUNNING | COMPLETED
@@ -66,14 +66,7 @@ const memoryStore = {
     round3StationCount: 5,
     registrationCount: 0,
     activeRound: 1,
-    colleges: [
-      'K. Ramakrishnan College of Technology', 
-      'Anna University', 
-      'Saranathan College of Engineering', 
-      'National Institute of Technology Trichy', 
-      'SASTRA Deemed University',
-      'Government College of Engineering'
-    ]
+    colleges: []
   },
   users: [],
   questions: [],
@@ -87,6 +80,56 @@ const memoryStore = {
   auditLogs: [],
   antiCheatLogs: []
 };
+
+// Helper: Reset In-Memory Store Completely
+function resetMemoryStore() {
+  memoryStore.eventState = {
+    status: 'REGISTRATION',
+    round1MaxQuestions: 20,
+    round1DurationMinutes: 20,
+    round1QualifyCount: 30,
+    round2QualifyCount: 10,
+    round3StationCount: 5,
+    registrationCount: 0,
+    activeRound: 1,
+    colleges: []
+  };
+  memoryStore.users = [];
+  memoryStore.questions = [];
+  memoryStore.quizAttempts = {};
+  memoryStore.debugProblems = [];
+  memoryStore.debugAttempts = {};
+  memoryStore.techClues = [];
+  memoryStore.huntAttempts = {};
+  memoryStore.submissions = [];
+  memoryStore.announcements = [];
+  memoryStore.auditLogs = [];
+  memoryStore.antiCheatLogs = [];
+}
+
+// REST API Endpoint: Purge All In-Memory & Database Data
+app.post('/api/admin/purge-all-data', async (req, res) => {
+  try {
+    resetMemoryStore();
+    if (isDbConnected) {
+      await User.deleteMany({});
+      await QuizAttempt.deleteMany({});
+      await DebugAttempt.deleteMany({});
+      await HuntAttempt.deleteMany({});
+      await Submission.deleteMany({});
+      await AntiCheatLog.deleteMany({});
+      await AuditLog.deleteMany({});
+      await Question.deleteMany({});
+      await DebugProblem.deleteMany({});
+      await TechClue.deleteMany({});
+      await Announcement.deleteMany({});
+      await EventState.updateMany({}, { registrationCount: 0, status: 'REGISTRATION', activeRound: 1, colleges: [] });
+    }
+    res.json({ success: true, message: 'All in-memory state and database collections purged successfully.' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 // Helper: Secure Server-Side Fisher-Yates Array Shuffle
 function secureShuffle(array) {
@@ -146,25 +189,16 @@ const JWT_SECRET = process.env.JWT_SECRET || 'technova_secret_symposium_key_2026
 // GET List of Colleges for Dropdowns
 app.get('/api/colleges', async (req, res) => {
   try {
-    const defaultColleges = [
-      'K. Ramakrishnan College of Technology',
-      'Anna University',
-      'Saranathan College of Engineering',
-      'National Institute of Technology Trichy',
-      'SASTRA Deemed University',
-      'Government College of Engineering'
-    ];
-
     let colleges = [];
     if (isDbConnected) {
       const state = await getEventState();
-      colleges = state?.colleges || defaultColleges;
+      colleges = state?.colleges || [];
       const userColleges = await User.distinct('college', { college: { $ne: '' } });
-      colleges = Array.from(new Set([...colleges, ...userColleges, ...defaultColleges]));
+      colleges = Array.from(new Set([...colleges, ...userColleges]));
     } else {
-      const stateColleges = memoryStore.eventState.colleges || defaultColleges;
+      const stateColleges = memoryStore.eventState.colleges || [];
       const userColleges = memoryStore.users.map(u => u.college).filter(Boolean);
-      colleges = Array.from(new Set([...stateColleges, ...userColleges, ...defaultColleges]));
+      colleges = Array.from(new Set([...stateColleges, ...userColleges]));
     }
 
     res.json({ success: true, colleges });

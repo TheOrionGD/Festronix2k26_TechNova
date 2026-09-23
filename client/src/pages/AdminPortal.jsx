@@ -4,13 +4,13 @@ import { API_BASE } from '../config';
 import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
 import ContentManagementHub from '../components/ContentManagementHub';
-import { 
-  ShieldCheck, 
-  Settings, 
-  Trophy, 
-  Plus, 
-  Trash2, 
-  ShieldAlert, 
+import {
+  ShieldCheck,
+  Settings,
+  Trophy,
+  Plus,
+  Trash2,
+  ShieldAlert,
   Sliders,
   Database,
   Users,
@@ -21,13 +21,13 @@ import {
 } from 'lucide-react';
 
 export default function AdminPortal() {
-  const { 
-    eventState, 
-    updateEventState, 
-    antiCheatFlags, 
-    leaderboard, 
-    questions, 
-    fetchQuestions 
+  const {
+    eventState,
+    updateEventState,
+    antiCheatFlags,
+    leaderboard,
+    questions,
+    fetchQuestions
   } = useApp();
 
   const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'coordinators' | 'qualifications' | 'questions' | 'audit'
@@ -207,7 +207,7 @@ export default function AdminPortal() {
       if (data.success) {
         fetchCoordinators();
       }
-    } catch (err) {}
+    } catch (err) { }
   };
 
   return (
@@ -217,7 +217,7 @@ export default function AdminPortal() {
       <div className="flex flex-1">
         <Sidebar />
 
-        <main className="flex-1 p-6 overflow-y-auto max-w-7xl mx-auto space-y-6 animate-hero-entrance">
+        <main className="flex-1 p-6 space-y-6 max-w-7xl mx-auto w-full min-w-0 animate-hero-entrance">
           {/* Top Banner */}
           <div className="bg-[#EFEEEA] p-6 rounded-2xl border border-[#595959] shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4 card-hover-lift">
             <div className="flex items-center gap-4">
@@ -242,9 +242,8 @@ export default function AdminPortal() {
           <div className="flex flex-wrap items-center gap-2 border-b border-[#595959]/20 pb-2 text-xs font-bold">
             <button
               onClick={() => setActiveTab('overview')}
-              className={`px-4 py-2 rounded-xl transition-all duration-200 flex items-center gap-2 cursor-pointer btn-interactive ${
-                activeTab === 'overview' ? 'bg-[#D60303] text-[#EFEEEA] shadow-xs' : 'bg-[#EFEEEA] border border-[#595959] text-[#595959] hover:bg-[#595959]/10'
-              }`}
+              className={`px-4 py-2 rounded-xl transition-all duration-200 flex items-center gap-2 cursor-pointer btn-interactive ${activeTab === 'overview' ? 'bg-[#D60303] text-[#EFEEEA] shadow-xs' : 'bg-[#EFEEEA] border border-[#595959] text-[#595959] hover:bg-[#595959]/10'
+                }`}
             >
               <Sliders className="w-4 h-4" />
               <span>Event Controls & Limits</span>
@@ -252,9 +251,8 @@ export default function AdminPortal() {
 
             <button
               onClick={() => setActiveTab('coordinators')}
-              className={`px-4 py-2 rounded-xl transition-all duration-200 flex items-center gap-2 cursor-pointer btn-interactive ${
-                activeTab === 'coordinators' ? 'bg-[#D60303] text-[#EFEEEA] shadow-xs' : 'bg-[#EFEEEA] border border-[#595959] text-[#595959] hover:bg-[#595959]/10'
-              }`}
+              className={`px-4 py-2 rounded-xl transition-all duration-200 flex items-center gap-2 cursor-pointer btn-interactive ${activeTab === 'coordinators' ? 'bg-[#D60303] text-[#EFEEEA] shadow-xs' : 'bg-[#EFEEEA] border border-[#595959] text-[#595959] hover:bg-[#595959]/10'
+                }`}
             >
               <Users className="w-4 h-4" />
               <span>Coordinator & Credentials Management ({coordinatorsList.length})</span>
@@ -262,9 +260,8 @@ export default function AdminPortal() {
 
             <button
               onClick={() => setActiveTab('qualifications')}
-              className={`px-4 py-2 rounded-xl transition-all duration-200 flex items-center gap-2 cursor-pointer btn-interactive ${
-                activeTab === 'qualifications' ? 'bg-[#D60303] text-[#EFEEEA] shadow-xs' : 'bg-[#EFEEEA] border border-[#595959] text-[#595959] hover:bg-[#595959]/10'
-              }`}
+              className={`px-4 py-2 rounded-xl transition-all duration-200 flex items-center gap-2 cursor-pointer btn-interactive ${activeTab === 'qualifications' ? 'bg-[#D60303] text-[#EFEEEA] shadow-xs' : 'bg-[#EFEEEA] border border-[#595959] text-[#595959] hover:bg-[#595959]/10'
+                }`}
             >
               <Trophy className="w-4 h-4" />
               <span>Live Leaderboard ({leaderboard.length})</span>
@@ -272,9 +269,8 @@ export default function AdminPortal() {
 
             <button
               onClick={() => setActiveTab('questions')}
-              className={`px-4 py-2 rounded-xl transition-all duration-200 flex items-center gap-2 cursor-pointer btn-interactive ${
-                activeTab === 'questions' ? 'bg-[#D60303] text-[#EFEEEA] shadow-xs' : 'bg-[#EFEEEA] border border-[#595959] text-[#595959] hover:bg-[#595959]/10'
-              }`}
+              className={`px-4 py-2 rounded-xl transition-all duration-200 flex items-center gap-2 cursor-pointer btn-interactive ${activeTab === 'questions' ? 'bg-[#D60303] text-[#EFEEEA] shadow-xs' : 'bg-[#EFEEEA] border border-[#595959] text-[#595959] hover:bg-[#595959]/10'
+                }`}
             >
               <Database className="w-4 h-4" />
               <span>Question Bank ({questions.length})</span>
@@ -282,9 +278,8 @@ export default function AdminPortal() {
 
             <button
               onClick={() => setActiveTab('audit')}
-              className={`px-4 py-2 rounded-xl transition-all duration-200 flex items-center gap-2 cursor-pointer btn-interactive ${
-                activeTab === 'audit' ? 'bg-[#D60303] text-[#EFEEEA] shadow-xs' : 'bg-[#EFEEEA] border border-[#595959] text-[#595959] hover:bg-[#595959]/10'
-              }`}
+              className={`px-4 py-2 rounded-xl transition-all duration-200 flex items-center gap-2 cursor-pointer btn-interactive ${activeTab === 'audit' ? 'bg-[#D60303] text-[#EFEEEA] shadow-xs' : 'bg-[#EFEEEA] border border-[#595959] text-[#595959] hover:bg-[#595959]/10'
+                }`}
             >
               <ShieldAlert className="w-4 h-4" />
               <span>Anti-Cheat Audit Logs ({antiCheatFlags.length})</span>
@@ -616,17 +611,19 @@ export default function AdminPortal() {
 
           {/* TAB 3: Live Leaderboard */}
           {activeTab === 'qualifications' && (
-            <div className="bg-[#EFEEEA] p-6 rounded-2xl border border-[#595959] shadow-sm space-y-4 card-hover-lift animate-slide-up">
-              <h3 className="text-base font-bold text-[#A30B1A]">Live Participant Scoreboard</h3>
+            <div className="bg-white dark:bg-[#141417] p-6 rounded-2xl border border-zinc-200 dark:border-[#27272a] shadow-sm space-y-4 card-hover-lift animate-slide-up relative z-20">
+              <h3 className="text-base font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                <span className="text-[#D60303]">★</span> Live Participant Scoreboard
+              </h3>
 
               {leaderboard.length === 0 ? (
-                <div className="p-8 text-center text-[#595959] text-xs font-medium">
+                <div className="p-8 text-center text-[#595959] dark:text-[#a1a1aa] text-xs font-medium">
                   No participants registered yet.
                 </div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
-                    <thead className="bg-[#595959] text-[#EFEEEA] font-mono">
+                    <thead className="bg-[#EFEEEA] dark:bg-[#09090b] text-[#18181B] dark:text-[#f4f4f5] font-mono border-b border-zinc-200 dark:border-[#27272a]">
                       <tr>
                         <th className="p-3">Rank</th>
                         <th className="p-3">ID</th>
@@ -638,21 +635,20 @@ export default function AdminPortal() {
                         <th className="p-3 text-center">Status</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-[#595959]/20 text-[#595959]">
+                    <tbody className="divide-y divide-zinc-200 dark:divide-[#27272a] text-[#595959] dark:text-[#a1a1aa]">
                       {leaderboard.map(row => (
-                        <tr key={row.id} className="hover:bg-[#595959]/5 transition-colors font-medium">
+                        <tr key={row.id} className="hover:bg-zinc-50 dark:hover:bg-[#1a1a1e] transition-colors font-medium">
                           <td className="p-3 font-bold text-[#D60303]">#{row.rank}</td>
-                          <td className="p-3 font-mono text-[#595959]">{row.id}</td>
-                          <td className="p-3 font-semibold">{row.name}</td>
-                          <td className="p-3 text-center text-[#A30B1A] font-bold">{row.r1}</td>
+                          <td className="p-3 font-mono text-zinc-700 dark:text-zinc-300 font-bold">{row.id}</td>
+                          <td className="p-3 font-semibold text-zinc-900 dark:text-white">{row.name}</td>
+                          <td className="p-3 text-center text-[#A30B1A] dark:text-[#ef4444] font-bold">{row.r1}</td>
                           <td className="p-3 text-center text-[#C23D31] font-bold">{row.r2}</td>
                           <td className="p-3 text-center text-[#D60303] font-bold">{row.r3}</td>
-                          <td className="p-3 text-center font-bold text-[#A30B1A]">{row.total} pts</td>
+                          <td className="p-3 text-center font-bold text-[#A30B1A] dark:text-white">{row.total} pts</td>
                           <td className="p-3 text-center">
-                            <span className="px-2 py-0.5 rounded bg-[#A30B1A] text-[#EFEEEA] font-bold text-[10px]">
+                            <span className="px-2 py-0.5 rounded bg-[#D60303] text-white font-bold text-[10px]">
                               {row.status}
-                            </span>
-                          </td>
+                            </span></td>
                         </tr>
                       ))}
                     </tbody>

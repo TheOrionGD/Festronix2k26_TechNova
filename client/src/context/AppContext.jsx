@@ -33,6 +33,24 @@ export const AppProvider = ({ children }) => {
     score: 0
   });
 
+  // Theme state: 'light' | 'dark'
+  const [theme, setTheme] = useState(() => {
+    return localStorage.getItem('technova_theme') || 'light';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('technova_theme', theme);
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => (prev === 'light' ? 'dark' : 'light'));
+  };
+
   // Anti-Cheat Logger Signals
   const [antiCheatFlags, setAntiCheatFlags] = useState([]);
   const [warningCount, setWarningCount] = useState(0);
@@ -410,7 +428,9 @@ export const AppProvider = ({ children }) => {
       fetchTechClues,
       isOffline,
       showOfflineToast,
-      setShowOfflineToast
+      setShowOfflineToast,
+      theme,
+      toggleTheme
     }}>
       {children}
 

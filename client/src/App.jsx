@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
+import CinematicParticleCanvas from './components/CinematicParticleCanvas';
 import SplashScreen from './pages/SplashScreen';
 import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
@@ -78,7 +79,7 @@ function MainContent() {
   };
 
   return (
-    <div key={currentScreen} className="animate-hero-entrance w-full">
+    <div key={currentScreen} className="animate-hero-entrance w-full relative z-10">
       {renderScreen()}
     </div>
   );
@@ -88,6 +89,7 @@ export default function App() {
   return (
     <AppProvider>
       <GlobalSecurityWrapper>
+        <CinematicParticleCanvas />
         <MainContent />
       </GlobalSecurityWrapper>
     </AppProvider>
