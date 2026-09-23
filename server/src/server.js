@@ -649,17 +649,22 @@ app.get('/api/event/status', async (req, res) => {
 app.post('/api/auth/login', rateLimitLogin, async (req, res) => {
   const { id, userId, password, email } = req.body;
   const inputId = (id || userId || email || '').trim();
+  const cleanPassword = (password || '').trim();
 
-  if (!inputId || !password) {
+  if (!inputId || !cleanPassword) {
     return res.status(400).json({ success: false, message: 'User ID and Password are required.' });
   }
 
   try {
     let user = null;
-    if (isDbConnected) {
+    const isConnected = isDbConnected || (mongoose.connection && mongoose.connection.readyState === 1);
+
+    if (isConnected) {
+      const escapedId = inputId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       user = await User.findOne({
         $or: [
           { id: inputId },
+          { id: { $regex: `^${escapedId}$`, $options: 'i' } },
           { email: inputId.toLowerCase() }
         ]
       });
@@ -684,13 +689,13 @@ app.post('/api/auth/login', rateLimitLogin, async (req, res) => {
     // Server-Side Password Verification (Bcrypt + legacy transparent re-hashing)
     let isPasswordValid = false;
     if (user.password.startsWith('$2a$') || user.password.startsWith('$2b$')) {
-      isPasswordValid = await bcrypt.compare(password, user.password);
+      isPasswordValid = await bcrypt.compare(cleanPassword, user.password);
     } else {
-      if (user.password === password) {
+      if (user.password === cleanPassword) {
         isPasswordValid = true;
-        const newHash = await bcrypt.hash(password, 10);
+        const newHash = await bcrypt.hash(cleanPassword, 10);
         user.password = newHash;
-        if (isDbConnected) {
+        if (isConnected) {
           await User.updateOne({ _id: user._id }, { password: newHash });
         }
       }

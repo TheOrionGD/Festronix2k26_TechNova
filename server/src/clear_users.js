@@ -73,7 +73,7 @@ async function clearAllData() {
       const annRes = await Announcement.deleteMany({});
       console.log(`Deleted ${annRes.deletedCount} announcements.`);
 
-      await EventState.updateMany({}, { registrationCount: 0, status: 'REGISTRATION', activeRound: 1 });
+      await EventState.updateMany({}, { registrationCount: 0, status: 'REGISTRATION', activeRound: 1, colleges: [] });
       console.log('Reset EventState to 0 registrationCount and REGISTRATION status.');
 
       await mongoose.disconnect();
