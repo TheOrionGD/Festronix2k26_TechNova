@@ -20,10 +20,22 @@ import {
 } from 'lucide-react';
 
 export default function CoordinatorPortal() {
-  const { currentUser, setIsCoordinatorModalOpen, setPendingVerificationProblemId, fetchLeaderboard } = useApp();
+  const { 
+    currentUser, 
+    setIsCoordinatorModalOpen, 
+    setPendingVerificationProblemId, 
+    fetchLeaderboard,
+    eventState,
+    updateEventState
+  } = useApp();
   const [activeTab, setActiveTab] = useState('verification'); // 'verification' | 'participants' | 'content'
   const [submissionsList, setSubmissionsList] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  const handleSetRoundStatus = (status, activeRound) => {
+    updateEventState({ status, activeRound });
+    alert(`⚡ Event Status Updated to: ${status}`);
+  };
 
   // Participant Management State
   const [participantsList, setParticipantsList] = useState([]);
@@ -281,6 +293,65 @@ export default function CoordinatorPortal() {
               <span className="px-3 py-1 rounded-full bg-[#A30B1A] text-white font-bold shadow-2xs">
                 COORD: {currentUser?.id || 'COORDINATOR'} ({myAllocatedCount} Assigned)
               </span>
+            </div>
+          </div>
+
+          {/* REAL-TIME EVENT ROUND CONTROL BAR */}
+          <div className="bg-white dark:bg-[#141417] p-5 rounded-2xl border-2 border-[#D60303] shadow-md space-y-3 card-hover-lift">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Clock className="w-5 h-5 text-[#D60303] animate-pulse" />
+                <h3 className="font-mono font-bold text-zinc-900 dark:text-white text-sm uppercase">
+                  Lab Coordinator Round Access Controls
+                </h3>
+              </div>
+              <span className="text-xs font-mono font-bold px-3 py-1 rounded-full bg-[#D60303] text-white">
+                CURRENT STATUS: {eventState?.status || 'REGISTRATION'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 pt-1 text-xs font-bold font-mono">
+              <button
+                onClick={() => handleSetRoundStatus('ROUND_1_RUNNING', 1)}
+                className="p-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white transition cursor-pointer btn-interactive text-center"
+              >
+                ▶ Initiate Round 1
+              </button>
+
+              <button
+                onClick={() => handleSetRoundStatus('ROUND_1_ENDED', 1)}
+                className="p-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white transition cursor-pointer btn-interactive text-center"
+              >
+                ⏹ End Round 1
+              </button>
+
+              <button
+                onClick={() => handleSetRoundStatus('ROUND_2_RUNNING', 2)}
+                className="p-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white transition cursor-pointer btn-interactive text-center"
+              >
+                ▶ Initiate Round 2
+              </button>
+
+              <button
+                onClick={() => handleSetRoundStatus('ROUND_2_ENDED', 2)}
+                className="p-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white transition cursor-pointer btn-interactive text-center"
+              >
+                ⏹ End Round 2
+              </button>
+
+              <button
+                onClick={() => handleSetRoundStatus('ROUND_3_RUNNING', 3)}
+                className="p-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white transition cursor-pointer btn-interactive text-center"
+              >
+                ▶ Initiate Round 3
+              </button>
+
+              <button
+                onClick={() => handleSetRoundStatus('REGISTRATION', 1)}
+                className="p-2.5 rounded-xl bg-zinc-700 hover:bg-zinc-800 text-white transition cursor-pointer btn-interactive text-center"
+              >
+                🔒 Reset / Lock All
+              </button>
             </div>
           </div>
 

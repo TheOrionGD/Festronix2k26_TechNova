@@ -56,6 +56,9 @@ export default function Round1Quiz() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [showInitiatedBanner, setShowInitiatedBanner] = useState(true);
+
+  const { flaggedQuestions, toggleFlagQuestion } = useApp();
 
   // Initialize or Restore Quiz Attempt
   useEffect(() => {
@@ -132,6 +135,13 @@ export default function Round1Quiz() {
     const qId = currentQ.questionId;
     const updatedAnswers = { ...userAnswers, [qId]: optIndex };
     setUserAnswers(updatedAnswers);
+
+    // Auto-advance to next question smoothly after 250ms
+    if (currentIdx < questions.length - 1) {
+      setTimeout(() => {
+        setCurrentIdx(prev => Math.min(questions.length - 1, prev + 1));
+      }, 250);
+    }
 
     try {
       await fetch(`${API_BASE}/quiz/answer`, {
@@ -312,9 +322,23 @@ export default function Round1Quiz() {
                     <span className="text-xs font-bold text-[#D60303] uppercase tracking-wider font-mono">
                       Question {currentIdx + 1} of {questions.length}
                     </span>
-                    <span className="px-3 py-1 rounded-full bg-red-50 dark:bg-[#991B1B]/20 text-[#D60303] text-xs font-bold font-mono">
-                      1 Mark
-                    </span>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => toggleFlagQuestion(currentQ.questionId)}
+                        className={`px-3 py-1 rounded-xl text-xs font-bold font-mono transition flex items-center gap-1.5 cursor-pointer btn-interactive ${
+                          flaggedQuestions[currentQ.questionId]
+                            ? 'bg-amber-500 text-white shadow-xs'
+                            : 'bg-zinc-100 dark:bg-[#09090b] text-zinc-600 dark:text-[#a1a1aa] hover:bg-amber-100 dark:hover:bg-amber-950/30'
+                        }`}
+                      >
+                        🚩 {flaggedQuestions[currentQ.questionId] ? 'Flagged' : 'Flag for Review'}
+                      </button>
+
+                      <span className="px-3 py-1 rounded-full bg-red-50 dark:bg-[#991B1B]/20 text-[#D60303] text-xs font-bold font-mono">
+                        1 Mark
+                      </span>
+                    </div>
                   </div>
 
                   <h3 className="text-base sm:text-lg font-bold text-zinc-900 dark:text-white leading-relaxed">
@@ -378,6 +402,7 @@ export default function Round1Quiz() {
                   <div className="grid grid-cols-5 gap-2">
                     {questions.map((q, idx) => {
                       const isAnswered = userAnswers[q.questionId] !== undefined;
+                      const isFlagged = flaggedQuestions[q.questionId];
                       const isCurrent = idx === currentIdx;
 
                       return (
@@ -386,9 +411,13 @@ export default function Round1Quiz() {
                           onClick={() => setCurrentIdx(idx)}
                           className={`w-8 h-8 rounded-lg text-xs font-bold font-mono transition-all duration-200 flex items-center justify-center cursor-pointer btn-interactive ${
                             isCurrent
-                              ? 'ring-2 ring-[#D60303] bg-[#D60303] text-white shadow-xs'
+                              ? 'ring-2 ring-[#D60303] font-extrabold shadow-md'
+                              : ''
+                          } ${
+                            isFlagged
+                              ? 'bg-amber-500 text-white'
                               : isAnswered
-                              ? 'bg-[#A30B1A] text-white'
+                              ? 'bg-emerald-600 text-white'
                               : 'bg-[#F8F7F4] dark:bg-[#09090b] border border-zinc-200 dark:border-[#27272a] text-zinc-700 dark:text-[#a1a1aa]'
                           }`}
                         >
@@ -398,10 +427,14 @@ export default function Round1Quiz() {
                     })}
                   </div>
 
-                  <div className="pt-2 text-[11px] text-[#595959] dark:text-[#71717a] font-medium space-y-1">
+                  <div className="pt-2 text-[11px] text-[#595959] dark:text-[#71717a] font-medium space-y-1.5">
                     <div className="flex items-center gap-2">
-                      <span className="w-3 h-3 bg-[#A30B1A] rounded"></span>
+                      <span className="w-3 h-3 bg-emerald-600 rounded"></span>
                       <span>Answered ({answeredCount})</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-3 h-3 bg-amber-500 rounded"></span>
+                      <span>Flagged for Review ({Object.values(flaggedQuestions).filter(Boolean).length})</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="w-3 h-3 bg-[#F8F7F4] dark:bg-[#09090b] border border-zinc-300 dark:border-[#27272a] rounded"></span>
@@ -415,8 +448,38 @@ export default function Round1Quiz() {
         </main>
       </div>
 
+      {/* ROUND 1 INITIATED CELEBRATION OVERLAY */}
+      {showInitiatedBanner && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-6 text-center animate-slide-up select-none">
+          <div className="max-w-md w-full bg-white dark:bg-[#141417] border-2 border-[#D60303] rounded-3xl p-8 space-y-6 text-zinc-900 dark:text-white shadow-2xl relative overflow-hidden">
+            <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-[#D60303] to-[#A30B1A] text-white flex items-center justify-center mx-auto shadow-xl ring-4 ring-red-200 dark:ring-red-950 animate-bounce">
+              <Brain className="w-10 h-10" />
+            </div>
+
+            <div className="space-y-2">
+              <span className="text-xs font-mono font-bold text-[#D60303] uppercase tracking-widest bg-red-100 dark:bg-red-950/40 px-3 py-1 rounded-full border border-red-300 dark:border-red-800">
+                🚀 CELEBRATION — ACTIVATED
+              </span>
+              <h3 className="text-2xl font-black text-zinc-900 dark:text-white uppercase tracking-tight">
+                ROUND 1 INITIATED
+              </h3>
+              <p className="text-xs text-zinc-600 dark:text-[#a1a1aa] leading-relaxed font-medium">
+                The Lab Coordinator has launched Round 1 (Tech Quiz). Your 20-minute timed module is now live with auto-advancing questions!
+              </p>
+            </div>
+
+            <button
+              onClick={() => setShowInitiatedBanner(false)}
+              className="w-full py-3.5 rounded-xl bg-[#D60303] hover:bg-[#A30B1A] text-white font-black text-xs uppercase tracking-wider shadow-lg transition cursor-pointer btn-interactive font-mono"
+            >
+              START ROUND 1 QUIZ NOW ➔
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Full Screen Enforcement Modal Overlay */}
-      {!isFullscreenActive && !isOffline && (
+      {!isFullscreenActive && !isOffline && !showInitiatedBanner && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-6 text-center animate-slide-up select-none">
           <div className="max-w-md w-full bg-white dark:bg-[#141417] border-2 border-[#D60303] rounded-2xl p-6 space-y-4 text-zinc-900 dark:text-white shadow-2xl">
             <div className="w-12 h-12 rounded-full bg-red-50 dark:bg-[#991B1B]/20 text-[#D60303] flex items-center justify-center mx-auto">
@@ -438,3 +501,4 @@ export default function Round1Quiz() {
     </div>
   );
 }
+

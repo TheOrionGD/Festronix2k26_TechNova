@@ -3,7 +3,19 @@ import { useApp } from '../context/AppContext';
 import { Bell, Copy, Shield, LogOut, Sun, Moon } from 'lucide-react';
 
 export default function Header() {
-  const { currentUser, logoutUser, setCurrentScreen, warningCount, theme, toggleTheme } = useApp();
+  const { 
+    currentUser, 
+    logoutUser, 
+    setCurrentScreen, 
+    warningCount, 
+    theme, 
+    toggleTheme,
+    notifications,
+    isNotificationsOpen,
+    toggleNotifications,
+    markAllNotificationsRead,
+    announcements
+  } = useApp();
 
   const copyParticipantId = () => {
     if (currentUser?.id) {
@@ -11,6 +23,8 @@ export default function Header() {
       alert(`Copied Participant ID: ${currentUser.id}`);
     }
   };
+
+  const unreadCount = notifications.filter(n => !n.read).length;
 
   return (
     <header className="h-16 bg-white/40 dark:bg-zinc-900/50 backdrop-blur-md border-b border-red-500/50 px-6 flex items-center justify-between sticky top-0 z-40 text-[#595959] dark:text-[#f4f4f5] transition-colors duration-200 shrink-0 select-none">
@@ -33,7 +47,7 @@ export default function Header() {
       </div>
 
       {/* Right: Theme Toggle, Anti-cheat indicator, Notifications, User info & Actions */}
-      <div className="flex items-center gap-3 sm:gap-4">
+      <div className="flex items-center gap-3 sm:gap-4 relative">
         {/* THEME CONVERSION TOGGLE BUTTON */}
         <button
           onClick={toggleTheme}
@@ -60,12 +74,70 @@ export default function Header() {
           </div>
         )}
 
-        {/* System Notification Icon */}
-        <div className="relative cursor-pointer p-2 rounded-lg bg-[#D60303] hover:bg-[#A30B1A] border border-red-500/80 text-white transition btn-interactive">
+        {/* System Notification Icon with Interactive Drawer Toggle */}
+        <div 
+          onClick={toggleNotifications}
+          className="relative cursor-pointer p-2 rounded-lg bg-[#D60303] hover:bg-[#A30B1A] border border-red-500/80 text-white transition btn-interactive"
+        >
           <Bell className="w-4 h-4 text-white" />
-          <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-white animate-ping"></span>
-          <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-white"></span>
+          {unreadCount > 0 && (
+            <>
+              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-white animate-ping"></span>
+              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-white"></span>
+            </>
+          )}
         </div>
+
+        {/* NOTIFICATIONS DROPDOWN DRAWER */}
+        {isNotificationsOpen && (
+          <div className="absolute right-20 top-14 w-80 sm:w-96 bg-white dark:bg-[#141417] border-2 border-[#D60303] rounded-2xl shadow-2xl z-50 p-4 space-y-3 animate-slide-up text-left">
+            <div className="flex items-center justify-between border-b border-red-500/40 pb-2">
+              <span className="text-xs font-mono font-bold text-[#D60303] uppercase tracking-wider flex items-center gap-1.5">
+                <Bell className="w-3.5 h-3.5 text-[#D60303]" /> System Notifications
+              </span>
+              <button 
+                onClick={markAllNotificationsRead} 
+                className="text-[10px] font-mono text-zinc-500 dark:text-[#a1a1aa] hover:text-[#D60303] cursor-pointer"
+              >
+                Mark all read
+              </button>
+            </div>
+
+            <div className="max-h-64 overflow-y-auto space-y-2 pr-1">
+              {notifications.map(n => (
+                <div key={n.id} className={`p-2.5 rounded-xl border text-xs space-y-1 transition-all ${
+                  n.read ? 'bg-zinc-50 dark:bg-[#09090b] border-zinc-200 dark:border-[#27272a]' : 'bg-red-50 dark:bg-[#991B1B]/20 border-red-300 dark:border-red-600'
+                }`}>
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-zinc-900 dark:text-white text-[11px] font-mono">{n.title}</span>
+                    <span className="text-[9px] font-mono text-zinc-400">{n.time}</span>
+                  </div>
+                  <p className="text-[11px] text-zinc-600 dark:text-[#a1a1aa] leading-snug">{n.message}</p>
+                </div>
+              ))}
+
+              {announcements.map(a => (
+                <div key={a.id} className="p-2.5 rounded-xl bg-zinc-50 dark:bg-[#09090b] border border-zinc-200 dark:border-[#27272a] text-xs space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-[#D60303] text-[11px] font-mono">{a.title}</span>
+                    <span className="text-[9px] font-mono text-zinc-400">{a.time}</span>
+                  </div>
+                  <p className="text-[11px] text-zinc-600 dark:text-[#a1a1aa] leading-snug">{a.message}</p>
+                </div>
+              ))}
+            </div>
+
+            <button 
+              onClick={() => {
+                toggleNotifications();
+                setCurrentScreen('announcements');
+              }}
+              className="w-full py-2 bg-[#D60303] hover:bg-[#A30B1A] text-white text-xs font-mono font-bold rounded-xl transition cursor-pointer btn-interactive text-center block"
+            >
+              View All Announcements & Notifications →
+            </button>
+          </div>
+        )}
 
         {/* User Card */}
         {currentUser ? (

@@ -387,7 +387,73 @@ export const AppProvider = ({ children }) => {
     }
   };
 
+  // Notification Drawer & Notifications List State
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [notifications, setNotifications] = useState([
+    {
+      id: 'notif-1',
+      title: 'TECHNOVA 2026 Welcome',
+      message: 'Welcome to the Department of CSE Technical Symposium. Please review event rules.',
+      time: 'Just now',
+      read: false,
+      type: 'INFO'
+    },
+    {
+      id: 'notif-2',
+      title: 'Anti-Cheat Telemetry Active',
+      message: 'Tab switches and fullscreen exits are monitored in real time.',
+      time: '5 mins ago',
+      read: false,
+      type: 'SECURITY'
+    }
+  ]);
+
+  const toggleNotifications = () => {
+    setIsNotificationsOpen(prev => !prev);
+  };
+
+  const markAllNotificationsRead = () => {
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+  };
+
+  // Quiz Question Flagging State
+  const [flaggedQuestions, setFlaggedQuestions] = useState({});
+
+  const toggleFlagQuestion = (questionId) => {
+    setFlaggedQuestions(prev => ({
+      ...prev,
+      [questionId]: !prev[questionId]
+    }));
+  };
+
+  // Round Access Validation Helper
+  const isRoundUnlocked = (roundNumber) => {
+    if (currentUser?.role === 'ADMIN' || currentUser?.role === 'COORDINATOR') return true;
+    const status = eventState?.status || 'REGISTRATION';
+    const activeR = eventState?.activeRound || 1;
+
+    if (roundNumber === 1) {
+      return status === 'ROUND_1_RUNNING' || status === 'ROUND_1_READY' || status === 'ROUND_1_ENDED' || activeR >= 1;
+    }
+    if (roundNumber === 2) {
+      return status === 'ROUND_2_RUNNING' || status === 'ROUND_2_READY' || status === 'ROUND_2_ENDED' || activeR >= 2;
+    }
+    if (roundNumber === 3) {
+      return status === 'ROUND_3_RUNNING' || status === 'ROUND_3_READY' || status === 'COMPLETED' || activeR >= 3;
+    }
+    return false;
+  };
+
   const navigateToRound = async (roundScreen) => {
+    let roundNum = 1;
+    if (roundScreen === 'round2') roundNum = 2;
+    if (roundScreen === 'round3') roundNum = 3;
+
+    if (!isRoundUnlocked(roundNum)) {
+      alert(`⚠️ Round ${roundNum} is currently locked!\nAwaiting Coordinator activation.`);
+      return;
+    }
+
     await requestFullScreen();
     setCurrentScreen(roundScreen);
   };
@@ -397,6 +463,7 @@ export const AppProvider = ({ children }) => {
       currentScreen,
       setCurrentScreen,
       navigateToRound,
+      isRoundUnlocked,
       requestFullScreen,
       currentUser,
       loginUser,
@@ -430,7 +497,14 @@ export const AppProvider = ({ children }) => {
       showOfflineToast,
       setShowOfflineToast,
       theme,
-      toggleTheme
+      toggleTheme,
+      notifications,
+      isNotificationsOpen,
+      setIsNotificationsOpen,
+      toggleNotifications,
+      markAllNotificationsRead,
+      flaggedQuestions,
+      toggleFlagQuestion
     }}>
       {children}
 

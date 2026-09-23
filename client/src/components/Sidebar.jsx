@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 
 export default function Sidebar() {
-  const { currentScreen, setCurrentScreen, currentUser } = useApp();
+  const { currentScreen, setCurrentScreen, navigateToRound, currentUser, isRoundUnlocked } = useApp();
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, targetScreen: 'dashboard' },
@@ -22,21 +22,21 @@ export default function Sidebar() {
       id: 'round1',
       label: 'Round 1 — Tech Quiz',
       icon: CheckCircle2,
-      status: 'completed',
+      status: isRoundUnlocked(1) ? 'active' : 'locked',
       targetScreen: 'round1'
     },
     {
       id: 'round2',
       label: 'Round 2 — Debug It',
       icon: Code2,
-      status: 'active',
+      status: isRoundUnlocked(2) ? 'active' : 'locked',
       targetScreen: 'round2'
     },
     {
       id: 'round3',
       label: 'Round 3 — Tech Hunt',
       icon: Lock,
-      status: 'locked',
+      status: isRoundUnlocked(3) ? 'active' : 'locked',
       targetScreen: 'round3'
     }
   ];
@@ -44,10 +44,10 @@ export default function Sidebar() {
   const secondaryNavItems = [
     { id: 'admin', label: 'Admin Portal', icon: ShieldCheck, role: 'ADMIN', targetScreen: 'admin' },
     { id: 'coordinator', label: 'Coordinator Workspace', icon: Trophy, role: 'COORDINATOR', targetScreen: 'coordinator' },
-    { id: 'rules', label: 'Event Rules', icon: FileText, targetScreen: 'landing' },
-    { id: 'announcements', label: 'Announcements', icon: Megaphone, targetScreen: 'dashboard' },
-    { id: 'profile', label: 'Profile', icon: User, targetScreen: 'dashboard' },
-    { id: 'support', label: 'Help & Support', icon: HelpCircle, targetScreen: 'dashboard' }
+    { id: 'rules', label: 'Event Rules', icon: FileText, targetScreen: 'rules' },
+    { id: 'announcements', label: 'Announcements', icon: Megaphone, targetScreen: 'announcements' },
+    { id: 'profile', label: 'Profile', icon: User, targetScreen: 'profile' },
+    { id: 'support', label: 'Help & Support', icon: HelpCircle, targetScreen: 'support' }
   ];
 
   return (
@@ -63,7 +63,13 @@ export default function Sidebar() {
             return (
               <button
                 key={item.id}
-                onClick={() => setCurrentScreen(item.targetScreen)}
+                onClick={() => {
+                  if (item.id.startsWith('round')) {
+                    navigateToRound(item.targetScreen);
+                  } else {
+                    setCurrentScreen(item.targetScreen);
+                  }
+                }}
                 className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 group cursor-pointer border ${
                   isActive
                     ? 'bg-[#D60303] text-white border-red-400 shadow-md transform translate-x-1'
