@@ -19,6 +19,7 @@ import {
   AntiCheatLog,
   AuditLog
 } from './models.js';
+import { seedQuestions, seedDebugProblems, seedTechClues } from './seedData.js';
 
 dotenv.config();
 
@@ -40,17 +41,52 @@ let isDbConnected = false;
 import fs from 'fs';
 import path from 'path';
 
+async function autoSeedBanks() {
+  try {
+    if (isDbConnected) {
+      const qCount = await Question.countDocuments();
+      if (qCount < 100) {
+        await Question.deleteMany({});
+        await Question.insertMany(seedQuestions);
+        console.log(`Auto-seeded ${seedQuestions.length} CS MCQs into MongoDB.`);
+      }
+      const dCount = await DebugProblem.countDocuments();
+      if (dCount < 50) {
+        await DebugProblem.deleteMany({});
+        await DebugProblem.insertMany(seedDebugProblems);
+        console.log(`Auto-seeded ${seedDebugProblems.length} Debug Problems into MongoDB.`);
+      }
+      const cCount = await TechClue.countDocuments();
+      if (cCount < 50) {
+        await TechClue.deleteMany({});
+        await TechClue.insertMany(seedTechClues);
+        console.log(`Auto-seeded ${seedTechClues.length} Tech Hunt Clues into MongoDB.`);
+      }
+    } else {
+      memoryStore.questions = [...seedQuestions];
+      memoryStore.debugProblems = [...seedDebugProblems];
+      memoryStore.techClues = [...seedTechClues];
+      console.log(`Auto-seeded memoryStore with ${seedQuestions.length} MCQs, ${seedDebugProblems.length} Debug Problems, and ${seedTechClues.length} Tech Clues.`);
+    }
+  } catch (err) {
+    console.error('Auto-seed error:', err.message);
+  }
+}
+
 async function connectDatabase() {
   if (!MONGODB_URI) {
     console.log('MongoDB Connection Notice: DATABASE_URL not configured in process.env. Operating in local dynamic memory mode.');
+    autoSeedBanks();
     return;
   }
   try {
     await mongoose.connect(MONGODB_URI, { serverSelectionTimeoutMS: 5000 });
     isDbConnected = true;
     console.log('MongoDB Cloud Atlas connected successfully.');
+    await autoSeedBanks();
   } catch (err) {
     console.warn('MongoDB Connection Notice: Operating in local dynamic memory mode.', err.message);
+    autoSeedBanks();
   }
 }
 connectDatabase();
@@ -1597,10 +1633,25 @@ app.post('/api/debug/start', async (req, res) => {
     if (existingAttempt) {
       selectedProblems = activeProblems.filter(p => existingAttempt.selectedProblemIds.includes(p.problemId || p.id));
     } else {
-      const shuffled = secureShuffle(activeProblems);
-      const picked = shuffled.slice(0, 3);
-      const selectedIds = picked.map(p => p.problemId || p.id);
+      // Pick 1 C problem, 1 Python problem, 1 Java problem, and 1 Bonus problem
+      const cProbs = secureShuffle(activeProblems.filter(p => (p.language || '').toUpperCase() === 'C'));
+      const pyProbs = secureShuffle(activeProblems.filter(p => (p.language || '').toUpperCase() === 'PYTHON'));
+      const javaProbs = secureShuffle(activeProblems.filter(p => (p.language || '').toUpperCase() === 'JAVA'));
+      const bonusProbs = secureShuffle(activeProblems.filter(p => p.isBonus || (p.marks === 0)));
 
+      const picked = [];
+      if (cProbs.length > 0) picked.push(cProbs[0]);
+      if (pyProbs.length > 0) picked.push(pyProbs[0]);
+      if (javaProbs.length > 0) picked.push(javaProbs[0]);
+      if (bonusProbs.length > 0) picked.push(bonusProbs[0]);
+
+      // Fallback if specific languages missing
+      if (picked.length < 4) {
+        const remaining = secureShuffle(activeProblems.filter(p => !picked.includes(p)));
+        picked.push(...remaining.slice(0, 4 - picked.length));
+      }
+
+      const selectedIds = picked.map(p => p.problemId || p.id);
       const attemptId = `ATT2-${participantId}-${Date.now()}`;
       const newAttempt = {
         attemptId,
@@ -1625,7 +1676,8 @@ app.post('/api/debug/start', async (req, res) => {
       language: p.language,
       brokenCode: p.brokenCode,
       expectedOutput: p.expectedOutput,
-      marks: p.marks || 10,
+      marks: p.marks || 0,
+      isBonus: !!p.isBonus || idx === 3,
       problemNumber: idx + 1,
       totalProblems: selectedProblems.length
     }));

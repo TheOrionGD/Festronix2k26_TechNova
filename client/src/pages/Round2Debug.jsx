@@ -60,17 +60,40 @@ export default function Round2Debug() {
     initDebug();
   }, [currentUser]);
 
+  const [allDebugBank, setAllDebugBank] = useState([]);
+  const [selectedBonusLang, setSelectedBonusLang] = useState('Python');
+
+  useEffect(() => {
+    const fetchAllBank = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/admin/debug-problems`);
+        const data = await res.json();
+        if (data.success) {
+          setAllDebugBank(data.problems || []);
+        }
+      } catch (err) {}
+    };
+    fetchAllBank();
+  }, []);
+
   const currentProblem = problems[currentProbIdx];
 
+  // Dynamic Bonus Practice Problem resolution when on Problem 4 or Bonus problem
+  const displayedProblem = (currentProblem?.isBonus || currentProblem?.problemNumber === 4)
+    ? (allDebugBank.find(p => (p.language || '').toUpperCase() === selectedBonusLang.toUpperCase() && p.isBonus) ||
+       allDebugBank.find(p => (p.language || '').toUpperCase() === selectedBonusLang.toUpperCase()) ||
+       currentProblem)
+    : currentProblem;
+
   const handleCopyCode = () => {
-    if (currentProblem?.brokenCode) {
-      navigator.clipboard.writeText(currentProblem.brokenCode);
+    if (displayedProblem?.brokenCode) {
+      navigator.clipboard.writeText(displayedProblem.brokenCode);
       alert('Broken code copied to clipboard!');
     }
   };
 
   const handleSubmitCode = async () => {
-    if (!currentProblem || !participantCode.trim()) {
+    if (!displayedProblem || !participantCode.trim()) {
       alert('Please enter your corrected solution code.');
       return;
     }
@@ -82,7 +105,7 @@ export default function Round2Debug() {
 
     setIsSubmitting(true);
     const pid = currentUser?.id || 'TN2026-GUEST';
-    const probId = currentProblem.problemId;
+    const probId = displayedProblem.problemId;
 
     try {
       const res = await fetch(`${API_BASE}/debug/submit`, {
@@ -114,7 +137,7 @@ export default function Round2Debug() {
     }
   };
 
-  const subState = currentProblem ? (submissions[currentProblem.problemId] || { status: 'NOT_STARTED' }) : { status: 'NOT_STARTED' };
+  const subState = displayedProblem ? (submissions[displayedProblem.problemId] || { status: 'NOT_STARTED' }) : { status: 'NOT_STARTED' };
 
   return (
     <div className="min-h-screen bg-transparent text-[#595959] dark:text-[#f4f4f5] flex flex-col transition-colors duration-200">
@@ -138,7 +161,7 @@ export default function Round2Debug() {
 
             <div className="flex items-center gap-2 font-mono text-xs">
               <span className="px-3 py-1 rounded-full bg-[#A30B1A] text-white font-bold shadow-2xs">
-                Assigned: {problems.length} Problems
+                Assigned: {problems.length} Workstations (3 Graded + 1 Bonus Practice)
               </span>
             </div>
           </div>
@@ -153,7 +176,7 @@ export default function Round2Debug() {
               <h3 className="text-lg font-bold text-zinc-900 dark:text-white">Cannot Start Round 2</h3>
               <p className="text-xs text-zinc-600 dark:text-[#a1a1aa] font-medium">{errorMessage}</p>
             </div>
-          ) : currentProblem ? (
+          ) : displayedProblem ? (
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6 animate-slide-up">
               {/* Problem Workspace */}
               <div className="md:col-span-3 space-y-6">
@@ -164,24 +187,48 @@ export default function Round2Debug() {
                       <span className="px-2.5 py-1 bg-[#D60303] text-white font-mono font-bold text-xs rounded">
                         Problem #{currentProblem.problemNumber} of {currentProblem.totalProblems}
                       </span>
-                      <span className="px-3 py-1 bg-zinc-100 dark:bg-[#09090b] text-zinc-700 dark:text-[#a1a1aa] font-bold text-xs rounded-full font-mono border border-zinc-200 dark:border-[#27272a]">
-                        {currentProblem.language}
-                      </span>
+                      
+                      {(currentProblem?.isBonus || currentProblem?.problemNumber === 4) ? (
+                        <div className="flex items-center gap-2">
+                          <label className="text-xs font-mono font-bold text-[#D60303]">Select Practice Language:</label>
+                          <select
+                            value={selectedBonusLang}
+                            onChange={(e) => setSelectedBonusLang(e.target.value)}
+                            className="px-3 py-1 bg-white dark:bg-[#09090b] border-2 border-[#D60303] rounded-lg text-xs font-mono font-bold text-zinc-900 dark:text-white outline-none cursor-pointer"
+                          >
+                            <option value="Python">Python</option>
+                            <option value="C">C Language</option>
+                            <option value="Java">Java</option>
+                            <option value="C++">C++</option>
+                            <option value="JavaScript">JavaScript</option>
+                          </select>
+                        </div>
+                      ) : (
+                        <span className="px-3 py-1 bg-zinc-100 dark:bg-[#09090b] text-zinc-700 dark:text-[#a1a1aa] font-bold text-xs rounded-full font-mono border border-zinc-200 dark:border-[#27272a]">
+                          {displayedProblem.language}
+                        </span>
+                      )}
                     </div>
 
-                    <span className="px-3 py-1 rounded-full bg-[#A30B1A]/10 text-[#A30B1A] dark:text-rose-400 font-bold text-xs font-mono border border-[#A30B1A]/20">
-                      {currentProblem.marks} Marks
-                    </span>
+                    {(currentProblem?.isBonus || currentProblem?.problemNumber === 4) ? (
+                      <span className="px-3 py-1 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold text-xs font-mono border border-amber-500/30">
+                        ✨ BONUS PRACTICE (NON-MANDATORY)
+                      </span>
+                    ) : (
+                      <span className="px-3 py-1 rounded-full bg-[#A30B1A]/10 text-[#A30B1A] dark:text-rose-400 font-bold text-xs font-mono border border-[#A30B1A]/20">
+                        {displayedProblem.marks || 10} Marks
+                      </span>
+                    )}
                   </div>
 
-                  <h3 className="text-base font-bold text-zinc-900 dark:text-white">{currentProblem.title}</h3>
-                  <p className="text-xs text-zinc-600 dark:text-[#a1a1aa] font-medium leading-relaxed">{currentProblem.description}</p>
+                  <h3 className="text-base font-bold text-zinc-900 dark:text-white">{displayedProblem.title}</h3>
+                  <p className="text-xs text-zinc-600 dark:text-[#a1a1aa] font-medium leading-relaxed">{displayedProblem.description}</p>
 
                   {/* Broken Code Snippet */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5">
-                        <Terminal className="w-4 h-4 text-[#D60303]" /> Broken Code Snippet
+                        <Terminal className="w-4 h-4 text-[#D60303]" /> Broken Code Snippet ({displayedProblem.language})
                       </span>
                       <button
                         onClick={handleCopyCode}
@@ -192,15 +239,15 @@ export default function Round2Debug() {
                     </div>
 
                     <pre className="bg-zinc-950 p-4 rounded-xl text-xs font-mono text-[#22c55e] overflow-x-auto leading-relaxed border border-zinc-800 shadow-inner">
-                      {currentProblem.brokenCode}
+                      {displayedProblem.brokenCode}
                     </pre>
                   </div>
 
                   {/* Expected Output */}
-                  {currentProblem.expectedOutput && (
+                  {displayedProblem.expectedOutput && (
                     <div className="p-3 bg-zinc-100 dark:bg-[#09090b] rounded-xl text-xs text-zinc-700 dark:text-zinc-300 font-mono border border-zinc-200 dark:border-[#27272a]">
                       <span className="font-bold text-[#D60303] block mb-0.5">Expected Output:</span>
-                      <code>{currentProblem.expectedOutput}</code>
+                      <code>{displayedProblem.expectedOutput}</code>
                     </div>
                   )}
 
@@ -258,6 +305,7 @@ export default function Round2Debug() {
                   <div className="space-y-2">
                     {problems.map((p, idx) => {
                       const isCurrent = idx === currentProbIdx;
+                      const isBonus = idx === 3 || p.isBonus;
                       return (
                         <button
                           key={p.problemId}
@@ -271,7 +319,7 @@ export default function Round2Debug() {
                               : 'bg-[#F8F7F4] dark:bg-[#09090b] border border-zinc-200 dark:border-[#27272a] text-zinc-700 dark:text-[#a1a1aa] hover:bg-zinc-200 dark:hover:bg-[#1a1a1e]'
                           }`}
                         >
-                          <span>Problem #{p.problemNumber} ({p.language})</span>
+                          <span>Problem #{p.problemNumber} {isBonus ? '(Bonus Practice)' : `(${p.language})`}</span>
                         </button>
                       );
                     })}
