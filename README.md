@@ -6,7 +6,7 @@
 
 > [!IMPORTANT]
 > **Bespoke & Event-Exclusive Architecture**  
-> Unlike generic or off-the-shelf competition platforms, **FESTRONIX Technova** is a **custom-engineered, purpose-built platform created uniquely and exclusively for this single event** (FESTRONIX 2026 Technical Symposium at KRCT). Every workflow—from server-side question randomization to Round 2 physical terminal PIN verification and Round 3 multi-station treasure hunting—is tailored specifically to the exact operational structure, rules, and lab setup of the Technova competition.
+> Unlike generic or off-the-shelf competition platforms, **FESTRONIX Technova** is a **custom-engineered, purpose-built platform created uniquely and exclusively for this single event** (FESTRONIX 2026 Technical Symposium at KRCT). Every workflow—from server-side question randomization to Round 2 physical terminal PIN verification and Round 3 multi-station treasure hunting—is tailored specifically to the exact operational structure, rules, and lab setup of the Technova competition as specified in the master system request document ([`system`](system)).
 
 ---
 
@@ -407,6 +407,7 @@ Technova/
 ├── .env.example                      # Sample root environment variable schema
 ├── .gitignore                        # Git ignore patterns
 ├── README.md                         # Master repository documentation (This File)
+├── system                            # Master System Request & Requirements Specification Document
 ├── client/                           # React Frontend Application
 │   ├── .env                          # Client environment file (VITE_API_BASE)
 │   ├── .env.example                  # Client environment schema example
@@ -587,6 +588,41 @@ node src/seed.js
 * ❌ Automated Email Verification / Password Reset via Email.
 * ❌ Automated Certificate PDF Generation.
 * ❌ Multi-Tenant Institution Separation (System is dedicated to FESTRONIX Technova 2026 at KRCT).
+
+---
+
+## 15. System Request & Master Requirements Specification (`system`)
+
+The application architecture, data schemas, role permissions, and competition round workflows were engineered according to the comprehensive **System Request Specification** documented in [`system`](file:///o:/Festronix2k26_TechNova/system).
+
+> [!NOTE]
+> **Master Prompt Specification Source**  
+> The file [`system`](file:///o:/Festronix2k26_TechNova/system) serves as the primary system specification prompt and architectural directive for the FESTRONIX Technova event management platform.
+
+### Core Mandates from the System Request
+
+1. **Unified 3-Round Event Pipeline (`TECHNOVA — Decode, Debug & Discover`):**
+   - **Round 1 (Tech Quiz - Decode):** Automated 20-question MCQ technical assessment covering 24 CS domains (C, C++, Java, Python, Data Structures, Algorithms, DBMS, OS, Web, Security, AI). Features server-side Fisher-Yates question & option randomization, 20-minute timer, and auto-submission.
+   - **Round 2 (Debug It - Debug):** Practical code debugging challenge. Contestants fix code on local IDE terminals and request physical lab inspection. Coordinators inspect execution and enter a secure 4-digit PIN (`1234`) to authorize and stream awarded marks.
+   - **Round 3 (Tech Hunt - Discover):** 5-station technical treasure hunt with sequential clue solving, hint request time/score penalties, and immediate backend answer validation.
+
+2. **Strict Role-Based Access Control (RBAC):**
+   - Formally defined across database schemas (`User.role`), JWT token payloads, backend authorization middleware, and React frontend navigation:
+     - `PARTICIPANT`: Portal registration/login, round participation, personal dashboard, live rank monitoring.
+     - `COORDINATOR`: Verification queue management, physical terminal PIN authorization, question bank editing.
+     - `ADMIN` / `SUPER_ADMIN`: Event state machine transitions (`REGISTRATION` ➔ `ROUND_1_RUNNING` ➔ `ROUND_2_RUNNING` ➔ `ROUND_3_RUNNING` ➔ `COMPLETED`), qualification cap settings (e.g., Top 30 for R2, Top 10 for R3), anti-cheat telemetry auditing, and live overall leaderboard control.
+
+3. **Scale & Concurrency Constraints:**
+   - Engineered to seamlessly support ~100 concurrent participants during Round 1, ~30 participants for Round 2, and ~10 finalists for Round 3.
+
+4. **Security & Anti-Cheat Specification:**
+   - Backend payload sanitization (stripping answer keys and solution fields before delivering payloads to participants).
+   - Client security wrappers blocking keyboard shortcuts (F12, DevTools) and right-click context menus.
+   - Tab switch and window blur tracking recorded in real-time anti-cheat audit logs.
+
+5. **Resilient Dual-Mode Data Store:**
+   - Primary persistence with MongoDB Atlas cloud database.
+   - Dynamic in-memory persistence fallback to ensure zero downtime during campus network or internet disruptions.
 
 ---
 

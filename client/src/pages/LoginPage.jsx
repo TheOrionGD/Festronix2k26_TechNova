@@ -151,7 +151,7 @@ export default function LoginPage() {
                   Sign In to Portal
                 </h2>
                 <p className="text-xs sm:text-sm text-zinc-500 dark:text-[#a1a1aa] font-normal">
-                  Enter your assigned User ID and Password for server authentication.
+                  Enter your assigned User ID or Email Address and Password to access the portal.
                 </p>
               </div>
 
@@ -163,7 +163,7 @@ export default function LoginPage() {
               )}
 
               <form onSubmit={handleSubmit} className="space-y-4">
-                {/* User ID Input */}
+                {/* User ID / Email Input */}
                 <div>
                   <label className="block text-xs font-bold text-zinc-700 dark:text-[#a1a1aa] mb-1.5 font-mono">
                     User ID / Email Address
@@ -177,7 +177,7 @@ export default function LoginPage() {
                       required
                       value={userIdInput}
                       onChange={(e) => setUserIdInput(e.target.value)}
-                      placeholder="e.g. TN2026-001 or admin@technova.edu"
+                      placeholder="e.g. TN2026-001 or user@email.com"
                       className="w-full pl-10 pr-4 py-3 bg-white/60 dark:bg-zinc-950/40 backdrop-blur-md border border-red-500/50 rounded-xl text-xs text-zinc-900 dark:text-white font-mono font-medium outline-none focus:border-[#D60303] focus:ring-2 focus:ring-red-500/20 transition-all duration-200"
                     />
                   </div>
@@ -186,7 +186,7 @@ export default function LoginPage() {
                 {/* Password Input */}
                 <div>
                   <label className="block text-xs font-bold text-zinc-700 dark:text-[#a1a1aa] mb-1.5 font-mono">
-                    Password
+                    Password / User ID
                   </label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-400">
@@ -197,7 +197,7 @@ export default function LoginPage() {
                       required
                       value={passwordInput}
                       onChange={(e) => setPasswordInput(e.target.value)}
-                      placeholder="••••••••"
+                      placeholder="•••••••• or TN2026-001"
                       className="w-full pl-10 pr-10 py-3 bg-white/60 dark:bg-zinc-950/40 backdrop-blur-md border border-red-500/50 rounded-xl text-xs text-zinc-900 dark:text-white font-mono font-medium outline-none focus:border-[#D60303] focus:ring-2 focus:ring-red-500/20 transition-all duration-200"
                     />
                     <button
@@ -213,12 +213,12 @@ export default function LoginPage() {
                 {/* Password Rules Checklist */}
                 <div className="space-y-1.5 pt-1 text-[11px] text-zinc-500 dark:text-[#71717a] font-medium font-mono">
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className={`w-3.5 h-3.5 ${passwordInput.length >= 6 ? 'text-emerald-600 dark:text-[#22c55e]' : 'text-zinc-300 dark:text-zinc-700'}`} />
-                    <span>Minimum 6 characters</span>
+                    <CheckCircle2 className={`w-3.5 h-3.5 ${userIdInput.trim().length > 0 ? 'text-emerald-600 dark:text-[#22c55e]' : 'text-zinc-300 dark:text-zinc-700'}`} />
+                    <span>Valid User ID or Email ID</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className={`w-3.5 h-3.5 ${userIdInput.trim().length > 0 ? 'text-emerald-600 dark:text-[#22c55e]' : 'text-zinc-300 dark:text-zinc-[#22c55e]'}`} />
-                    <span>Valid User ID or Email</span>
+                    <CheckCircle2 className={`w-3.5 h-3.5 ${passwordInput.trim().length > 0 ? 'text-emerald-600 dark:text-[#22c55e]' : 'text-zinc-300 dark:text-zinc-700'}`} />
+                    <span>Password (or User ID as Password)</span>
                   </div>
                 </div>
 

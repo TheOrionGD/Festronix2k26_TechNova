@@ -5,6 +5,8 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 import { 
   User, 
   EventState, 
@@ -19,7 +21,7 @@ import {
   AntiCheatLog,
   AuditLog
 } from './models.js';
-import { seedQuestions, seedDebugProblems, seedTechClues } from './seedData.js';
+import { seedQuestions, seedDebugProblems, seedTechClues, seedUsers } from './seedData.js';
 
 dotenv.config();
 
@@ -44,6 +46,14 @@ import path from 'path';
 async function autoSeedBanks() {
   try {
     if (isDbConnected) {
+      const uCount = await User.countDocuments();
+      if (uCount === 0) {
+        for (const uDef of seedUsers) {
+          const hashedPassword = await bcrypt.hash(uDef.password, 10);
+          await User.create({ ...uDef, password: hashedPassword });
+        }
+        console.log(`Auto-seeded ${seedUsers.length} official accounts into MongoDB.`);
+      }
       const qCount = await Question.countDocuments();
       if (qCount < 100) {
         await Question.deleteMany({});
@@ -63,10 +73,11 @@ async function autoSeedBanks() {
         console.log(`Auto-seeded ${seedTechClues.length} Tech Hunt Clues into MongoDB.`);
       }
     } else {
+      memoryStore.users = seedUsers.map(u => ({ ...u, password: bcrypt.hashSync(u.password, 10) }));
       memoryStore.questions = [...seedQuestions];
       memoryStore.debugProblems = [...seedDebugProblems];
       memoryStore.techClues = [...seedTechClues];
-      console.log(`Auto-seeded memoryStore with ${seedQuestions.length} MCQs, ${seedDebugProblems.length} Debug Problems, and ${seedTechClues.length} Tech Clues.`);
+      console.log(`Auto-seeded memoryStore with ${seedUsers.length} Users, ${seedQuestions.length} MCQs, ${seedDebugProblems.length} Debug Problems, and ${seedTechClues.length} Tech Clues.`);
     }
   } catch (err) {
     console.error('Auto-seed error:', err.message);
@@ -216,9 +227,6 @@ async function getEventState() {
 // ----------------------------------------------------
 // PUBLIC & AUTH ROUTES
 // ----------------------------------------------------
-
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -681,14 +689,14 @@ app.get('/api/event/status', async (req, res) => {
   }
 });
 
-// Single Secure Authentication Endpoint (User ID + Password -> JWT Token + Role Authorization)
+// Single Secure Authentication Endpoint (User ID / Email + Password / User ID -> JWT Token + Role Authorization)
 app.post('/api/auth/login', rateLimitLogin, async (req, res) => {
   const { id, userId, password, email } = req.body;
   const inputId = String(id ?? userId ?? email ?? '').trim();
   const cleanPassword = String(password ?? '').trim();
 
   if (!inputId || !cleanPassword) {
-    return res.status(400).json({ success: false, message: 'User ID and Password are required.' });
+    return res.status(400).json({ success: false, message: 'User ID / Email and Password are required.' });
   }
 
   try {
@@ -699,9 +707,8 @@ app.post('/api/auth/login', rateLimitLogin, async (req, res) => {
       const escapedId = inputId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       user = await User.findOne({
         $or: [
-          { id: inputId },
           { id: { $regex: `^${escapedId}$`, $options: 'i' } },
-          { email: inputId.toLowerCase() }
+          { email: { $regex: `^${escapedId}$`, $options: 'i' } }
         ]
       });
     } else {
@@ -722,12 +729,24 @@ app.post('/api/auth/login', rateLimitLogin, async (req, res) => {
       return res.status(401).json({ success: false, message: `Account is ${user.accountStatus.toLowerCase()}. Please contact administrator.` });
     }
 
-    // Server-Side Password Verification (Bcrypt + legacy transparent re-hashing)
+    // Server-Side Password Verification (Bcrypt + fallback matching for password as User ID / Email)
     let isPasswordValid = false;
-    if (user.password.startsWith('$2a$') || user.password.startsWith('$2b$')) {
+    if (user.password && (user.password.startsWith('$2a$') || user.password.startsWith('$2b$'))) {
       isPasswordValid = await bcrypt.compare(cleanPassword, user.password);
+      // Secondary fallback: check if password passed is user's ID or email (case-insensitive)
+      if (!isPasswordValid && (
+        cleanPassword.toLowerCase() === user.id.toLowerCase() ||
+        cleanPassword.toLowerCase() === (user.email || '').toLowerCase()
+      )) {
+        isPasswordValid = true;
+      }
     } else {
-      if (user.password === cleanPassword) {
+      if (
+        user.password === cleanPassword ||
+        (user.password && user.password.toLowerCase() === cleanPassword.toLowerCase()) ||
+        cleanPassword.toLowerCase() === user.id.toLowerCase() ||
+        cleanPassword.toLowerCase() === (user.email || '').toLowerCase()
+      ) {
         isPasswordValid = true;
         const newHash = await bcrypt.hash(cleanPassword, 10);
         user.password = newHash;

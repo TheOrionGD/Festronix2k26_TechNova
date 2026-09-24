@@ -456,8 +456,8 @@ export default function LandingPage() {
       <section
         id="pipeline"
         ref={(node) => {
-          workflowRef(node);
-          roundsRef(node);
+          workflowRef.current = node;
+          roundsRef.current = node;
         }}
         className={`relative z-10 py-8 px-4 max-w-5xl mx-auto space-y-6 w-full reveal-init ${workflowVisible || roundsVisible ? 'revealed' : ''}`}
       >
