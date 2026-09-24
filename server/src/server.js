@@ -244,7 +244,7 @@ async function getEventState() {
 // PUBLIC & AUTH ROUTES
 // ----------------------------------------------------
 
-const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_SECRET = process.env.JWT_SECRET || 'efbab4439c61d68d0ddecc8933614372f2d53029baffc803122e797da467719a';
 
 // GET List of Colleges for Dropdowns
 app.get('/api/colleges', async (req, res) => {
