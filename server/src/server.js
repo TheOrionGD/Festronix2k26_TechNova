@@ -21,7 +21,6 @@ import {
   AntiCheatLog,
   AuditLog
 } from './models.js';
-import { seedQuestions, seedDebugProblems, seedTechClues, seedUsers } from './seedData.js';
 
 dotenv.config();
 
@@ -45,39 +44,56 @@ import path from 'path';
 
 async function autoSeedBanks() {
   try {
+    let seedModule = null;
+    try {
+      seedModule = await import('./seedData.js');
+    } catch (e) {
+      console.log('Notice: Initial seed data file (seedData.js) not present. Skipping auto-seed.');
+      return;
+    }
+
+    const { seedQuestions = [], seedDebugProblems = [], seedTechClues = [], seedUsers = [] } = seedModule;
+
     if (isDbConnected) {
       const uCount = await User.countDocuments();
-      if (uCount === 0) {
+      if (uCount === 0 && seedUsers.length > 0) {
         for (const uDef of seedUsers) {
           const hashedPassword = await bcrypt.hash(uDef.password, 10);
           await User.create({ ...uDef, password: hashedPassword });
         }
-        console.log(`Auto-seeded ${seedUsers.length} official accounts into MongoDB.`);
+        console.log(`Initial seed: Added ${seedUsers.length} official accounts into MongoDB.`);
       }
+
       const qCount = await Question.countDocuments();
-      if (qCount < 100) {
-        await Question.deleteMany({});
+      if (qCount === 0 && seedQuestions.length > 0) {
         await Question.insertMany(seedQuestions);
-        console.log(`Auto-seeded ${seedQuestions.length} CS MCQs into MongoDB.`);
+        console.log(`Initial seed: Added ${seedQuestions.length} CS MCQs into MongoDB.`);
       }
+
       const dCount = await DebugProblem.countDocuments();
-      if (dCount < 50) {
-        await DebugProblem.deleteMany({});
+      if (dCount === 0 && seedDebugProblems.length > 0) {
         await DebugProblem.insertMany(seedDebugProblems);
-        console.log(`Auto-seeded ${seedDebugProblems.length} Debug Problems into MongoDB.`);
+        console.log(`Initial seed: Added ${seedDebugProblems.length} Debug Problems into MongoDB.`);
       }
+
       const cCount = await TechClue.countDocuments();
-      if (cCount < 50) {
-        await TechClue.deleteMany({});
+      if (cCount === 0 && seedTechClues.length > 0) {
         await TechClue.insertMany(seedTechClues);
-        console.log(`Auto-seeded ${seedTechClues.length} Tech Hunt Clues into MongoDB.`);
+        console.log(`Initial seed: Added ${seedTechClues.length} Tech Hunt Clues into MongoDB.`);
       }
     } else {
-      memoryStore.users = seedUsers.map(u => ({ ...u, password: bcrypt.hashSync(u.password, 10) }));
-      memoryStore.questions = [...seedQuestions];
-      memoryStore.debugProblems = [...seedDebugProblems];
-      memoryStore.techClues = [...seedTechClues];
-      console.log(`Auto-seeded memoryStore with ${seedUsers.length} Users, ${seedQuestions.length} MCQs, ${seedDebugProblems.length} Debug Problems, and ${seedTechClues.length} Tech Clues.`);
+      if ((!memoryStore.users || memoryStore.users.length === 0) && seedUsers.length > 0) {
+        memoryStore.users = seedUsers.map(u => ({ ...u, password: bcrypt.hashSync(u.password, 10) }));
+      }
+      if ((!memoryStore.questions || memoryStore.questions.length === 0) && seedQuestions.length > 0) {
+        memoryStore.questions = [...seedQuestions];
+      }
+      if ((!memoryStore.debugProblems || memoryStore.debugProblems.length === 0) && seedDebugProblems.length > 0) {
+        memoryStore.debugProblems = [...seedDebugProblems];
+      }
+      if ((!memoryStore.techClues || memoryStore.techClues.length === 0) && seedTechClues.length > 0) {
+        memoryStore.techClues = [...seedTechClues];
+      }
     }
   } catch (err) {
     console.error('Auto-seed error:', err.message);
