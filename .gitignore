@@ -61,11 +61,14 @@ splash_screen_*.png
 # Data Management & Admin Scripts (Clearing & Seeding)
 server/src/clear_participants.js
 server/src/clear_users.js
+server/src/cleanupParticipants.js
 server/src/seedData.js
 server/src/seedData copy.js
 **/clear_*.js
 **/seed_*.js
 **/seedData.js
 **/seedData copy.js
+**/cleanup*.js
+
 
 
