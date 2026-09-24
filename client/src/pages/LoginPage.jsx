@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/useApp';
 import CinematicParticleCanvas from '../components/CinematicParticleCanvas';
+import ExtensionSecurityGuard from '../components/ExtensionSecurityGuard';
+import { useExtensionDetector } from '../hooks/useExtensionDetector';
 import { 
   Code2, 
   User, 
@@ -11,6 +13,7 @@ import {
   EyeOff, 
   Sparkles,
   ShieldCheck,
+  ShieldAlert,
   CheckCircle2,
   ChevronLeft
 } from 'lucide-react';
@@ -24,9 +27,23 @@ export default function LoginPage() {
   const [errorMsg, setErrorMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
+  // Deep extension detector hook
+  const {
+    hasExtensions,
+    detectedExtensions,
+    isScanning,
+    rescan,
+    lastScanTime
+  } = useExtensionDetector();
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMsg('');
+
+    if (hasExtensions) {
+      setErrorMsg('Access blocked: You must remove or disable all browser extensions before signing in.');
+      return;
+    }
 
     if (!userIdInput.trim() || !passwordInput.trim()) {
       setErrorMsg('Please enter both User ID and Password.');
@@ -66,7 +83,7 @@ export default function LoginPage() {
       </div>
 
       {/* 1. LAYER 1: LOGIN SECTION */}
-      <div className="relative z-20 w-full max-w-4xl flex flex-col items-center justify-center">
+      <div className="relative z-20 w-full max-w-4xl flex flex-col items-center justify-center my-6">
         
         {/* Back to Home Button */}
         <div className="w-full flex justify-start mb-4">
@@ -144,8 +161,8 @@ export default function LoginPage() {
           </div>
 
           {/* RIGHT COLUMN: LOGIN FORM PANEL */}
-          <div className="md:col-span-7 p-8 sm:p-10 bg-white/40 dark:bg-transparent backdrop-blur-md flex flex-col justify-between space-y-6">
-            <div className="space-y-6">
+          <div className="md:col-span-7 p-6 sm:p-8 md:p-10 bg-white/40 dark:bg-transparent backdrop-blur-md flex flex-col justify-between space-y-5">
+            <div className="space-y-4">
               <div className="space-y-1">
                 <h2 className="text-2xl sm:text-3xl font-black text-zinc-900 dark:text-white tracking-tight">
                   Sign In to Portal
@@ -154,6 +171,15 @@ export default function LoginPage() {
                   Enter your assigned User ID or Email Address and Password to access the portal.
                 </p>
               </div>
+
+              {/* BROWSER EXTENSION DETECTION SECURITY GUARD BANNER */}
+              <ExtensionSecurityGuard 
+                hasExtensions={hasExtensions}
+                detectedExtensions={detectedExtensions}
+                isScanning={isScanning}
+                rescan={rescan}
+                lastScanTime={lastScanTime}
+              />
 
               {errorMsg && (
                 <div className="p-3.5 bg-red-50 dark:bg-[#991B1B]/20 border border-red-500 rounded-xl text-red-700 dark:text-red-400 text-xs flex items-center gap-2.5 font-semibold animate-slide-up shadow-2xs">
@@ -165,9 +191,16 @@ export default function LoginPage() {
               <form onSubmit={handleSubmit} className="space-y-4">
                 {/* User ID / Email Input */}
                 <div>
-                  <label className="block text-xs font-bold text-zinc-700 dark:text-[#a1a1aa] mb-1.5 font-mono">
-                    User ID / Email Address
-                  </label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-bold text-zinc-700 dark:text-[#a1a1aa] font-mono">
+                      User ID / Email Address
+                    </label>
+                    {hasExtensions && (
+                      <span className="text-[10px] font-mono font-bold text-red-500 flex items-center gap-1">
+                        <Lock className="w-3 h-3" /> Locked by Extension Policy
+                      </span>
+                    )}
+                  </div>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-400">
                       <User className="w-4 h-4" />
@@ -175,19 +208,31 @@ export default function LoginPage() {
                     <input
                       type="text"
                       required
+                      disabled={hasExtensions}
                       value={userIdInput}
                       onChange={(e) => setUserIdInput(e.target.value)}
-                      placeholder="e.g. TN2026-001 or user@email.com"
-                      className="w-full pl-10 pr-4 py-3 bg-white/60 dark:bg-zinc-950/40 backdrop-blur-md border border-red-500/50 rounded-xl text-xs text-zinc-900 dark:text-white font-mono font-medium outline-none focus:border-[#D60303] focus:ring-2 focus:ring-red-500/20 transition-all duration-200"
+                      placeholder={hasExtensions ? "🔒 Inputs locked: Disable browser extensions first" : "e.g. TN2026-001 or user@email.com"}
+                      className={`w-full pl-10 pr-4 py-3 backdrop-blur-md rounded-xl text-xs font-mono font-medium outline-none transition-all duration-200 ${
+                        hasExtensions 
+                          ? 'bg-zinc-100 dark:bg-zinc-900/60 border border-red-500/50 text-zinc-400 dark:text-zinc-500 cursor-not-allowed select-none' 
+                          : 'bg-white/60 dark:bg-zinc-950/40 border border-red-500/50 text-zinc-900 dark:text-white focus:border-[#D60303] focus:ring-2 focus:ring-red-500/20'
+                      }`}
                     />
                   </div>
                 </div>
 
                 {/* Password Input */}
                 <div>
-                  <label className="block text-xs font-bold text-zinc-700 dark:text-[#a1a1aa] mb-1.5 font-mono">
-                    Password / User ID
-                  </label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-bold text-zinc-700 dark:text-[#a1a1aa] font-mono">
+                      Password / User ID
+                    </label>
+                    {hasExtensions && (
+                      <span className="text-[10px] font-mono font-bold text-red-500 flex items-center gap-1">
+                        <Lock className="w-3 h-3" /> Locked
+                      </span>
+                    )}
+                  </div>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-400">
                       <Lock className="w-4 h-4" />
@@ -195,18 +240,25 @@ export default function LoginPage() {
                     <input
                       type={showPassword ? 'text' : 'password'}
                       required
+                      disabled={hasExtensions}
                       value={passwordInput}
                       onChange={(e) => setPasswordInput(e.target.value)}
-                      placeholder="•••••••• or TN2026-001"
-                      className="w-full pl-10 pr-10 py-3 bg-white/60 dark:bg-zinc-950/40 backdrop-blur-md border border-red-500/50 rounded-xl text-xs text-zinc-900 dark:text-white font-mono font-medium outline-none focus:border-[#D60303] focus:ring-2 focus:ring-red-500/20 transition-all duration-200"
+                      placeholder={hasExtensions ? "•••••••• (Locked)" : "•••••••• or TN2026-001"}
+                      className={`w-full pl-10 pr-10 py-3 backdrop-blur-md rounded-xl text-xs font-mono font-medium outline-none transition-all duration-200 ${
+                        hasExtensions 
+                          ? 'bg-zinc-100 dark:bg-zinc-900/60 border border-red-500/50 text-zinc-400 dark:text-zinc-500 cursor-not-allowed select-none' 
+                          : 'bg-white/60 dark:bg-zinc-950/40 border border-red-500/50 text-zinc-900 dark:text-white focus:border-[#D60303] focus:ring-2 focus:ring-red-500/20'
+                      }`}
                     />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="btn-transparent absolute inset-y-0 right-0 pr-3.5 flex items-center text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition cursor-pointer"
-                    >
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
+                    {!hasExtensions && (
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="btn-transparent absolute inset-y-0 right-0 pr-3.5 flex items-center text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition cursor-pointer"
+                      >
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -225,11 +277,24 @@ export default function LoginPage() {
                 {/* Primary Action Submit Button */}
                 <button
                   type="submit"
-                  disabled={isLoading}
-                  className="w-full py-3.5 rounded-xl bg-[#D60303] hover:bg-[#A30B1A] disabled:opacity-50 text-white border border-red-500/80 font-bold text-xs sm:text-sm font-mono shadow-md shadow-red-950/30 transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer btn-interactive group focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                  disabled={isLoading || hasExtensions}
+                  className={`w-full py-3.5 rounded-xl border font-bold text-xs sm:text-sm font-mono shadow-md transition-all duration-200 flex items-center justify-center gap-2 focus:outline-none ${
+                    hasExtensions
+                      ? 'bg-zinc-800/80 border-zinc-700 text-zinc-400 cursor-not-allowed opacity-60 shadow-none'
+                      : 'bg-[#D60303] hover:bg-[#A30B1A] border-red-500/80 text-white shadow-red-950/30 cursor-pointer btn-interactive group focus:ring-2 focus:ring-red-500 focus:ring-offset-2'
+                  }`}
                 >
-                  <span>{isLoading ? 'Authenticating with Server...' : 'SIGN IN TO PORTAL'}</span>
-                  <ArrowRight className="w-4 h-4 text-white transition-transform duration-200 group-hover:translate-x-1" />
+                  {hasExtensions ? (
+                    <span className="flex items-center gap-2">
+                      <Lock className="w-4 h-4 text-amber-400" />
+                      <span>REMOVE EXTENSIONS TO UNLOCK LOGIN</span>
+                    </span>
+                  ) : (
+                    <>
+                      <span>{isLoading ? 'Authenticating with Server...' : 'SIGN IN TO PORTAL'}</span>
+                      <ArrowRight className="w-4 h-4 text-white transition-transform duration-200 group-hover:translate-x-1" />
+                    </>
+                  )}
                 </button>
               </form>
             </div>
@@ -239,3 +304,4 @@ export default function LoginPage() {
     </div>
   );
 }
+
