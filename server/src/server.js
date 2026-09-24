@@ -118,6 +118,35 @@ async function connectDatabase() {
 }
 connectDatabase();
 
+// ─── ROUND CONFIGURATION ──────────────────────────────────────────────────────
+// Defines what percentage of participants are OFFICIALLY GRADED in each round.
+// 100 = everyone is graded (Round 1: all participants compete fully)
+//  80 = top 80% from Round 1 official leaderboard are graded in Round 2
+//  50 = top 50% from Round 2 official leaderboard are graded in Round 3
+// NOTE: 100% of participants can PARTICIPATE in every round regardless.
+//       Only the graded cohort affects official scores, rankings, and qualification.
+const DEFAULT_ROUND_GRADING_CONFIG = {
+  1: { gradingPercentage: 100 },
+  2: { gradingPercentage: 80 },
+  3: { gradingPercentage: 50 }
+};
+
+// ─── QUALIFICATION COUNT CALCULATOR ───────────────────────────────────────────
+// Centralized, deterministic function for calculating how many participants
+// receive official graded status in a given round.
+//
+// Strategy: Math.ceil — ensures at least 1 participant is always graded
+// (prevents edge case of 0 when total < 100 and percentage is small).
+// Example: 3 participants, 80% → ceil(2.4) = 3 (all graded, handles small counts)
+// Example: 10 participants, 80% → ceil(8) = 8 graded, 2 non-graded
+// Example: 11 participants, 50% → ceil(5.5) = 6 graded, 5 non-graded
+function calculateQualifiedCount(totalParticipants, percentage) {
+  if (totalParticipants <= 0) return 0;
+  if (percentage >= 100) return totalParticipants;
+  if (percentage <= 0) return 0;
+  return Math.ceil((percentage / 100) * totalParticipants);
+}
+
 // In-Memory Fallback Data Store (Initialized empty)
 const memoryStore = {
   eventState: {
@@ -129,7 +158,8 @@ const memoryStore = {
     round3StationCount: 5,
     registrationCount: 0,
     activeRound: 1,
-    colleges: []
+    colleges: [],
+    roundGradingConfig: { ...DEFAULT_ROUND_GRADING_CONFIG }
   },
   users: [],
   questions: [],
@@ -155,7 +185,8 @@ function resetMemoryStore() {
     round3StationCount: 5,
     registrationCount: 0,
     activeRound: 1,
-    colleges: []
+    colleges: [],
+    roundGradingConfig: { ...DEFAULT_ROUND_GRADING_CONFIG }
   };
   memoryStore.users = [];
   memoryStore.questions = [];
@@ -186,7 +217,13 @@ app.post('/api/admin/purge-all-data', async (req, res) => {
       await DebugProblem.deleteMany({});
       await TechClue.deleteMany({});
       await Announcement.deleteMany({});
-      await EventState.updateMany({}, { registrationCount: 0, status: 'REGISTRATION', activeRound: 1, colleges: [] });
+      await EventState.updateMany({}, {
+        registrationCount: 0,
+        status: 'REGISTRATION',
+        activeRound: 1,
+        colleges: [],
+        roundGradingConfig: DEFAULT_ROUND_GRADING_CONFIG
+      });
     }
     res.json({ success: true, message: 'All in-memory state and database collections purged successfully.' });
   } catch (err) {
@@ -915,8 +952,142 @@ app.get('/api/dashboard/stats', async (req, res) => {
 });
 
 // ----------------------------------------------------
+// ROUND GRADING CONFIG API (Admin)
+// ----------------------------------------------------
+
+// GET current round grading configuration
+app.get('/api/admin/round-grading-config', async (req, res) => {
+  try {
+    const state = await getEventState();
+    const config = state.roundGradingConfig || DEFAULT_ROUND_GRADING_CONFIG;
+    res.json({ success: true, roundGradingConfig: config });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// PUT update round grading configuration
+// Body: { roundGradingConfig: { 1: { gradingPercentage: 100 }, 2: { gradingPercentage: 80 }, 3: { gradingPercentage: 50 } } }
+app.put('/api/admin/round-grading-config', async (req, res) => {
+  const { roundGradingConfig } = req.body;
+  if (!roundGradingConfig || typeof roundGradingConfig !== 'object') {
+    return res.status(400).json({ success: false, message: 'roundGradingConfig object is required.' });
+  }
+
+  // Validate all percentages are 0-100
+  for (const [round, cfg] of Object.entries(roundGradingConfig)) {
+    const pct = cfg?.gradingPercentage;
+    if (typeof pct !== 'number' || pct < 0 || pct > 100) {
+      return res.status(400).json({
+        success: false,
+        message: `Round ${round}: gradingPercentage must be a number between 0 and 100.`
+      });
+    }
+  }
+
+  try {
+    if (isDbConnected) {
+      await EventState.updateOne({}, { $set: { roundGradingConfig } }, { upsert: true });
+    } else {
+      memoryStore.eventState.roundGradingConfig = roundGradingConfig;
+    }
+
+    const updatedState = await getEventState();
+    io.emit('eventState:updated', updatedState);
+
+    await createAuditLog('ADMIN', 'ADMIN', 'ROUND_GRADING_CONFIG_UPDATED', '', { roundGradingConfig });
+    res.json({ success: true, message: 'Round grading configuration updated.', roundGradingConfig });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET grading status for a specific participant and round
+app.get('/api/quiz/grading-status', async (req, res) => {
+  const { participantId, roundId } = req.query;
+  if (!participantId) {
+    return res.status(400).json({ success: false, message: 'participantId is required.' });
+  }
+
+  try {
+    const results = {};
+
+    // Round 1
+    let r1Attempt = null;
+    if (isDbConnected) {
+      r1Attempt = await QuizAttempt.findOne({ participantId });
+    } else {
+      r1Attempt = memoryStore.quizAttempts[participantId];
+    }
+    results.round1 = {
+      hasAttempt: !!r1Attempt,
+      gradingStatus: r1Attempt?.gradingStatus || 'graded', // R1 always graded
+      participationStatus: r1Attempt?.participationStatus || 'not_started',
+      qualificationStatus: r1Attempt?.qualificationStatus || 'not_applicable'
+    };
+
+    // Round 2
+    let r2Attempt = null;
+    if (isDbConnected) {
+      r2Attempt = await DebugAttempt.findOne({ participantId });
+    } else {
+      r2Attempt = memoryStore.debugAttempts[participantId];
+    }
+    results.round2 = {
+      hasAttempt: !!r2Attempt,
+      gradingStatus: r2Attempt?.gradingStatus || null,
+      participationStatus: r2Attempt?.participationStatus || 'not_started',
+      qualificationStatus: r2Attempt?.qualificationStatus || 'not_applicable'
+    };
+
+    // Round 3
+    let r3Attempt = null;
+    if (isDbConnected) {
+      r3Attempt = await HuntAttempt.findOne({ participantId });
+    } else {
+      r3Attempt = memoryStore.huntAttempts[participantId];
+    }
+    results.round3 = {
+      hasAttempt: !!r3Attempt,
+      gradingStatus: r3Attempt?.gradingStatus || null,
+      participationStatus: r3Attempt?.participationStatus || 'not_started',
+      qualificationStatus: r3Attempt?.qualificationStatus || 'not_applicable'
+    };
+
+    res.json({ success: true, participantId, gradingResults: results });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ----------------------------------------------------
 // LEADERBOARD COMPUTATION & SEQUENTIAL QUALIFICATION HELPER
 // ----------------------------------------------------
+
+// Attainment Performance Bands based on official Rubric criteria
+function getR1Band(score) {
+  if (score >= 16) return { band: 'Excellent', label: '16–20 pts (Excellent)', badgeColor: 'emerald' };
+  if (score >= 10) return { band: 'Good', label: '10–15 pts (Good)', badgeColor: 'amber' };
+  return { band: 'Poor', label: '<10 pts (Poor)', badgeColor: 'rose' };
+}
+
+function getR2Band(score) {
+  if (score >= 24) return { band: 'Excellent', label: '24–30 pts (Excellent)', badgeColor: 'emerald' };
+  if (score >= 15) return { band: 'Good', label: '15–23.5 pts (Good)', badgeColor: 'amber' };
+  return { band: 'Poor', label: '<15 pts (Poor)', badgeColor: 'rose' };
+}
+
+function getR3Band(score) {
+  if (score >= 40) return { band: 'Excellent', label: '40–50 pts (Excellent)', badgeColor: 'emerald' };
+  if (score >= 25) return { band: 'Good', label: '25–39 pts (Good)', badgeColor: 'amber' };
+  return { band: 'Poor', label: '<25 pts (Poor)', badgeColor: 'rose' };
+}
+
+function getGrandTotalBand(score) {
+  if (score >= 80) return { band: 'Excellent', label: '80–100 pts (Distinction / Excellent)', badgeColor: 'emerald' };
+  if (score >= 50) return { band: 'Good', label: '50–79.5 pts (Merit / Good)', badgeColor: 'amber' };
+  return { band: 'Poor', label: '<50 pts (Needs Improvement)', badgeColor: 'rose' };
+}
 
 async function computeLeaderboardData() {
   let participants = [];
@@ -937,11 +1108,18 @@ async function computeLeaderboardData() {
   }
 
   const state = await getEventState();
-  const r1QualifyLimit = state.round1QualifyCount || 30;
-  const r2QualifyLimit = state.round2QualifyCount || 10;
   const isR1EndedOrFurther = ['ROUND_1_ENDED', 'ROUND_2_READY', 'ROUND_2_RUNNING', 'ROUND_2_ENDED', 'ROUND_3_READY', 'ROUND_3_RUNNING', 'COMPLETED'].includes(state.status);
   const isR2EndedOrFurther = ['ROUND_2_ENDED', 'ROUND_3_READY', 'ROUND_3_RUNNING', 'COMPLETED'].includes(state.status);
-  const isEventCompleted = state.status === 'COMPLETED';
+  const isEventCompleted = state.status === 'COMPLETED' || state.status === 'ROUND_3_ENDED';
+  const isAllRoundsEnded = ['ROUND_3_ENDED', 'COMPLETED'].includes(state.status);
+
+  // ── ROUND GRADING CONFIGURATION ───────────────────────────────────────────
+  const roundGradingConfig = state.roundGradingConfig || DEFAULT_ROUND_GRADING_CONFIG;
+  const r2GradingPct = roundGradingConfig[2]?.gradingPercentage ?? 80;
+  const r3GradingPct = roundGradingConfig[3]?.gradingPercentage ?? 50;
+  const totalParticipants = participants.length;
+  const r2GradedCount = calculateQualifiedCount(totalParticipants, r2GradingPct);
+  const r3GradedCount = calculateQualifiedCount(totalParticipants, r3GradingPct);
 
   // 1. Build participant base records
   const rawList = participants.map(p => {
@@ -951,20 +1129,31 @@ async function computeLeaderboardData() {
 
     const r1Score = qAttempt ? (qAttempt.score || 0) : 0;
     const r1SubmittedAt = qAttempt?.submittedAt ? new Date(qAttempt.submittedAt).getTime() : (qAttempt?.updatedAt ? new Date(qAttempt.updatedAt).getTime() : 0);
-    const r1Duration = (qAttempt?.startedAt && qAttempt?.submittedAt) 
-      ? (new Date(qAttempt.submittedAt).getTime() - new Date(qAttempt.startedAt).getTime()) 
+    const r1Duration = (qAttempt?.startedAt && qAttempt?.submittedAt)
+      ? (new Date(qAttempt.submittedAt).getTime() - new Date(qAttempt.startedAt).getTime())
       : 999999999;
     const hasAttemptedR1 = !!qAttempt;
 
     const r2Score = r2Subs.reduce((acc, curr) => acc + (curr.marks || 0), 0);
-    const r2LatestVerified = r2Subs.length > 0 
-      ? Math.max(...r2Subs.map(s => s.verifiedAt ? new Date(s.verifiedAt).getTime() : 0)) 
+    const r2LatestVerified = r2Subs.length > 0
+      ? Math.max(...r2Subs.map(s => s.verifiedAt ? new Date(s.verifiedAt).getTime() : 0))
       : 0;
     const hasAttemptedR2 = r2Subs.length > 0;
 
     const r3Score = hAttempt ? (hAttempt.score || 0) : 0;
     const r3SubmittedAt = hAttempt?.updatedAt ? new Date(hAttempt.updatedAt).getTime() : 0;
     const hasAttemptedR3 = !!hAttempt;
+
+    const hintsMap = hAttempt?.hintsUsed instanceof Map ? Object.fromEntries(hAttempt.hintsUsed) : (hAttempt?.hintsUsed || {});
+    const r3HintsCount = Object.values(hintsMap).filter(Boolean).length;
+    const r3Duration = (hAttempt?.startedAt && hAttempt?.status === 'COMPLETED' && hAttempt?.updatedAt)
+      ? (new Date(hAttempt.updatedAt).getTime() - new Date(hAttempt.startedAt).getTime())
+      : 999999999;
+
+    const roundedR2Score = Number(r2Score.toFixed(1));
+    const totalScore = Number((r1Score + roundedR2Score + r3Score).toFixed(1));
+
+    const isDisqualified = p.accountStatus === 'DISQUALIFIED' || qAttempt?.status === 'DISQUALIFIED' || hAttempt?.status === 'DISQUALIFIED';
 
     return {
       id: p.id,
@@ -973,22 +1162,26 @@ async function computeLeaderboardData() {
       college: p.college,
       department: p.department,
       year: p.year,
-      r1Score,
+      accountStatus: p.accountStatus,
+      isDisqualified,
+      r1Score: isDisqualified ? 0 : r1Score,
       r1SubmittedAt,
       r1Duration,
       hasAttemptedR1,
-      r2Score,
+      r2Score: isDisqualified ? 0 : roundedR2Score,
       r2LatestVerified,
       hasAttemptedR2,
-      r3Score,
+      r3Score: isDisqualified ? 0 : r3Score,
       r3SubmittedAt,
+      r3HintsCount,
+      r3Duration,
       hasAttemptedR3,
-      totalScore: r1Score + r2Score + r3Score
+      totalScore: isDisqualified ? 0 : totalScore
     };
   });
 
-  // 2. Step 1: Round 1 Sorting & Round 2 Selection
-  // Primary: r1Score DESC, Secondary: r1Duration ASC (fastest time), Tertiary: r1SubmittedAt ASC
+  // 2. Step 1: Round 1 Sorting & R2 Graded Cohort Selection
+  // Priority: r1Score DESC → r1Duration ASC → r1SubmittedAt ASC → id ASC (deterministic)
   const r1Sorted = [...rawList].sort((a, b) => {
     if (b.r1Score !== a.r1Score) return b.r1Score - a.r1Score;
     if (a.r1Duration !== b.r1Duration) return a.r1Duration - b.r1Duration;
@@ -996,23 +1189,25 @@ async function computeLeaderboardData() {
     return a.id.localeCompare(b.id);
   });
 
-  // Assign R1 ranks & determine R2 qualification
   const r1RankMap = new Map();
-  const qualifiedR2Set = new Set();
+  // gradedR2Set: official graded cohort for Round 2 (top r2GradedCount by R1 leaderboard)
+  // ALL participants can ATTEND R2, only this set is officially graded
+  const gradedR2Set = new Set();
+  const qualifiedR2Set = new Set(); // alias for backward compat
 
   r1Sorted.forEach((p, idx) => {
     const rank = idx + 1;
     r1RankMap.set(p.id, rank);
-    // Qualified for Round 2 if within cutoff
-    if (rank <= r1QualifyLimit && (p.hasAttemptedR1 || state.status === 'REGISTRATION' || !isR1EndedOrFurther || p.r1Score > 0)) {
+    if (rank <= r2GradedCount) {
+      gradedR2Set.add(p.id);
       qualifiedR2Set.add(p.id);
     }
   });
 
-  // 3. Step 2: Round 2 Sorting & Round 3 Selection
-  // Only R2 qualifiers compete for R3 selection
-  const r2QualifiersList = rawList.filter(p => qualifiedR2Set.has(p.id));
-  const r2Sorted = [...r2QualifiersList].sort((a, b) => {
+  // 3. Step 2: Round 2 Sorting & R3 Graded Cohort Selection
+  // Only the gradedR2Set participants feed into R3 graded cohort calculation
+  const r2GradedList = rawList.filter(p => gradedR2Set.has(p.id));
+  const r2Sorted = [...r2GradedList].sort((a, b) => {
     const aR1R2 = a.r1Score + a.r2Score;
     const bR1R2 = b.r1Score + b.r2Score;
     if (bR1R2 !== aR1R2) return bR1R2 - aR1R2;
@@ -1022,71 +1217,93 @@ async function computeLeaderboardData() {
   });
 
   const r2RankMap = new Map();
-  const qualifiedR3Set = new Set();
+  const gradedR3Set = new Set();
+  const qualifiedR3Set = new Set(); // alias for backward compat
 
   r2Sorted.forEach((p, idx) => {
     const rank = idx + 1;
     r2RankMap.set(p.id, rank);
-    if (rank <= r2QualifyLimit && (p.hasAttemptedR2 || !isR2EndedOrFurther || p.r2Score > 0)) {
+    if (rank <= r3GradedCount) {
+      gradedR3Set.add(p.id);
       qualifiedR3Set.add(p.id);
     }
   });
 
-  // 4. Step 3: Final Overall Ranking
-  // Sort entire leaderboard prioritizing progression tier, then cumulative score
+  // 4. Step 3: Final Overall Ranking with Master Tie-Breaking Hierarchy
   const finalLeaderboard = [...rawList].sort((a, b) => {
-    const aInR3 = qualifiedR3Set.has(a.id);
-    const bInR3 = qualifiedR3Set.has(b.id);
-    const aInR2 = qualifiedR2Set.has(a.id);
-    const bInR2 = qualifiedR2Set.has(b.id);
+    const aInR3 = gradedR3Set.has(a.id);
+    const bInR3 = gradedR3Set.has(b.id);
+    const aInR2 = gradedR2Set.has(a.id);
+    const bInR2 = gradedR2Set.has(b.id);
 
-    // If in Round 3 active or completed, R3 qualifiers are top tier
-    if (isR2EndedOrFurther) {
+    // Official graded cohort priority:
+    // Only participants in the official Round 3 Graded Cohort contend for official Podium Ranks
+    if (isR2EndedOrFurther || isEventCompleted) {
       if (aInR3 && !bInR3) return -1;
       if (!aInR3 && bInR3) return 1;
     }
-    
-    // If Round 1 completed, R2 qualifiers are above R1 eliminated
-    if (isR1EndedOrFurther) {
+    if (isR1EndedOrFurther || isEventCompleted) {
       if (aInR2 && !bInR2) return -1;
       if (!aInR2 && bInR2) return 1;
     }
 
-    // Inside tier, sort by totalScore DESC
+    // ── MASTER TIE-BREAKING HIERARCHY ──────────────────────────────────────────
+    // 1. Primary: Grand Total Cumulative Score (R1 + R2 + R3) DESC
     if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
-    if (b.r3Score !== a.r3Score) return b.r3Score - a.r3Score;
+
+    // 2. Tie-Breaker 1: Higher Score in Round 2 Debugging DESC
     if (b.r2Score !== a.r2Score) return b.r2Score - a.r2Score;
-    if (b.r1Score !== a.r1Score) return b.r1Score - a.r1Score;
+
+    // 3. Tie-Breaker 2: Fewer Hints Used in Round 3 ASC
+    if (a.r3HintsCount !== b.r3HintsCount) return a.r3HintsCount - b.r3HintsCount;
+
+    // 4. Tie-Breaker 3: Faster Time in Round 3 Tech Hunt ASC
+    if (a.r3Duration !== b.r3Duration) return a.r3Duration - b.r3Duration;
+    if (a.r3SubmittedAt && b.r3SubmittedAt && a.r3SubmittedAt !== b.r3SubmittedAt) {
+      return a.r3SubmittedAt - b.r3SubmittedAt;
+    }
+
+    // 5. Tie-Breaker 4: Faster Time in Round 1 Tech Quiz ASC
+    if (a.r1Duration !== b.r1Duration) return a.r1Duration - b.r1Duration;
+    if (a.r1SubmittedAt && b.r1SubmittedAt && a.r1SubmittedAt !== b.r1SubmittedAt) {
+      return a.r1SubmittedAt - b.r1SubmittedAt;
+    }
+
+    // Deterministic tie-breaker
     return a.id.localeCompare(b.id);
   });
 
   // 5. Format sanitized output
   const formattedLeaderboard = finalLeaderboard.map((item, idx) => {
     const overallRank = idx + 1;
-    const isQualifiedR2 = qualifiedR2Set.has(item.id);
-    const isQualifiedR3 = qualifiedR3Set.has(item.id);
+    const isQualifiedR2 = gradedR2Set.has(item.id);
+    const isQualifiedR3 = gradedR3Set.has(item.id);
     const r1R = r1RankMap.get(item.id) || overallRank;
     const r2R = r2RankMap.get(item.id) || null;
 
     let statusText = 'Registered';
     let qualificationStatus = 'REGISTERED';
 
-    if (isEventCompleted) {
-      if (overallRank === 1) { statusText = '🥇 1st Place (Champion)'; qualificationStatus = 'PODIUM_WINNER'; }
-      else if (overallRank === 2) { statusText = '🥈 2nd Place (Runner Up)'; qualificationStatus = 'PODIUM_WINNER'; }
-      else if (overallRank === 3) { statusText = '🥉 3rd Place'; qualificationStatus = 'PODIUM_WINNER'; }
+    if (item.isDisqualified) {
+      statusText = '🚨 Disqualified (Malpractice)';
+      qualificationStatus = 'DISQUALIFIED';
+    } else if (isEventCompleted) {
+      if (overallRank === 1 && isQualifiedR3) { statusText = '🥇 1st Place (Champion)'; qualificationStatus = 'PODIUM_WINNER'; }
+      else if (overallRank === 2 && isQualifiedR3) { statusText = '🥈 2nd Place (Runner Up)'; qualificationStatus = 'PODIUM_WINNER'; }
+      else if (overallRank === 3 && isQualifiedR3) { statusText = '🥉 3rd Place'; qualificationStatus = 'PODIUM_WINNER'; }
       else if (isQualifiedR3) { statusText = 'Round 3 Finalist'; qualificationStatus = 'QUALIFIED_R3'; }
-      else if (isQualifiedR2) { statusText = 'Round 2 Qualifier'; qualificationStatus = 'QUALIFIED_R2'; }
-      else { statusText = 'Completed'; qualificationStatus = 'COMPLETED'; }
+      else if (isQualifiedR2) { statusText = 'Round 2 Graded Qualifier'; qualificationStatus = 'QUALIFIED_R2'; }
+      else { statusText = 'Completed (Non-Graded)'; qualificationStatus = 'COMPLETED'; }
     } else if (state.status.startsWith('ROUND_3')) {
-      if (isQualifiedR3) { statusText = '⭐ Qualified for Round 3'; qualificationStatus = 'QUALIFIED_R3'; }
-      else { statusText = 'Eliminated in Round 2'; qualificationStatus = 'ELIMINATED'; }
+      if (isQualifiedR3) { statusText = '⭐ Official Round 3 Finalist'; qualificationStatus = 'QUALIFIED_R3'; }
+      else if (isQualifiedR2) { statusText = 'Round 3 Non-Graded'; qualificationStatus = 'NON_GRADED_R3'; }
+      else { statusText = 'Non-Graded Participant'; qualificationStatus = 'NON_GRADED'; }
     } else if (state.status.startsWith('ROUND_2')) {
-      if (isQualifiedR2) { statusText = '⭐ Qualified for Round 2'; qualificationStatus = 'QUALIFIED_R2'; }
-      else { statusText = 'Eliminated in Round 1'; qualificationStatus = 'ELIMINATED'; }
+      if (isQualifiedR2) { statusText = '⭐ Official Round 2 Graded'; qualificationStatus = 'QUALIFIED_R2'; }
+      else { statusText = 'Round 2 Non-Graded'; qualificationStatus = 'NON_GRADED_R2'; }
     } else if (state.status === 'ROUND_1_ENDED') {
-      if (isQualifiedR2) { statusText = '⭐ Qualified for Round 2'; qualificationStatus = 'QUALIFIED_R2'; }
-      else { statusText = 'Eliminated in Round 1'; qualificationStatus = 'ELIMINATED'; }
+      if (isQualifiedR2) { statusText = '⭐ Graded for Round 2'; qualificationStatus = 'QUALIFIED_R2'; }
+      else { statusText = 'Non-Graded for Round 2'; qualificationStatus = 'NON_GRADED_R2'; }
     } else if (state.status === 'ROUND_1_RUNNING') {
       statusText = item.hasAttemptedR1 ? 'Round 1 Submitted' : 'Round 1 Active';
       qualificationStatus = 'IN_CONTENTION';
@@ -1101,32 +1318,57 @@ async function computeLeaderboardData() {
       r1: item.r1Score,
       r1Score: item.r1Score,
       r1Rank: r1R,
+      r1Band: getR1Band(item.r1Score),
+      r1Duration: item.r1Duration,
       r2: item.r2Score,
       r2Score: item.r2Score,
       r2Rank: r2R,
+      r2Band: getR2Band(item.r2Score),
+      r2LatestVerified: item.r2LatestVerified,
       r3: item.r3Score,
       r3Score: item.r3Score,
+      r3Band: getR3Band(item.r3Score),
+      r3HintsCount: item.r3HintsCount,
+      r3Duration: item.r3Duration,
       total: item.totalScore,
       totalScore: item.totalScore,
+      grandBand: getGrandTotalBand(item.totalScore),
       rank: overallRank,
+      // qualifiedR2/R3 means "graded" for that round; ALL participants can always PARTICIPATE
       qualifiedR2: isQualifiedR2,
       qualifiedForRound2: isQualifiedR2,
       qualifiedR3: isQualifiedR3,
       qualifiedForRound3: isQualifiedR3,
-      isWinner: overallRank <= 3 && item.totalScore > 0,
+      isGradedR2: isQualifiedR2,
+      isGradedR3: isQualifiedR3,
+      canParticipateR2: true,
+      canParticipateR3: true,
+      isWinner: overallRank <= 3 && item.totalScore > 0 && isQualifiedR3 && !item.isDisqualified,
+      isDisqualified: !!item.isDisqualified,
       status: statusText,
       qualificationStatus
     };
   });
 
   const qualifySettings = {
-    round1QualifyCount: r1QualifyLimit,
-    round2QualifyCount: r2QualifyLimit,
+    round1QualifyCount: r2GradedCount,
+    round2QualifyCount: r3GradedCount,
+    r2GradedCount,
+    r3GradedCount,
+    r2GradingPct,
+    r3GradingPct,
+    totalParticipants,
     status: state.status,
-    activeRound: state.activeRound
+    activeRound: state.activeRound,
+    isAllRoundsEnded,
+    isEventCompleted,
+    r1MaxMarks: 20,
+    r2MaxMarks: 30,
+    r3MaxMarks: 50,
+    grandTotalMaxMarks: 100
   };
 
-  return { formattedLeaderboard, qualifySettings, qualifiedR2Set, qualifiedR3Set };
+  return { formattedLeaderboard, qualifySettings, qualifiedR2Set, qualifiedR3Set, gradedR2Set, gradedR3Set };
 }
 
 app.get('/api/leaderboard', async (req, res) => {
@@ -1389,7 +1631,7 @@ app.post('/api/quiz/start', async (req, res) => {
       });
     }
 
-    // 3. Check for existing attempt (Persistence check)
+    // 3. Check for existing attempt (Persistence check — idempotent)
     let existingAttempt = null;
     if (isDbConnected) {
       existingAttempt = await QuizAttempt.findOne({ participantId });
@@ -1413,14 +1655,26 @@ app.post('/api/quiz/start', async (req, res) => {
         success: true,
         attemptId: existingAttempt.attemptId,
         status: existingAttempt.status,
-        userAnswers: existingAttempt.userAnswers || {},
+        gradingStatus: existingAttempt.gradingStatus || 'graded',
+        participationStatus: existingAttempt.participationStatus || 'active',
+        userAnswers: existingAttempt.userAnswers instanceof Map
+          ? Object.fromEntries(existingAttempt.userAnswers)
+          : (existingAttempt.userAnswers || {}),
         startedAt: existingAttempt.startedAt,
         endsAt: existingAttempt.endsAt,
         questions: sanitizedQuestions
       });
     }
 
-    // 4. Perform SERVER-SIDE secure random selection & option shuffling
+    // 4. Round 1 is ALWAYS 100% graded — all participants are in the official cohort
+    // (gradingPercentage for round 1 is 100 by configuration)
+    const roundConfig = state.roundGradingConfig || DEFAULT_ROUND_GRADING_CONFIG;
+    const r1Pct = roundConfig[1]?.gradingPercentage ?? 100;
+    // For R1, everyone is graded
+    const r1GradingStatus = r1Pct >= 100 ? 'graded' : 'non_graded';
+    // In practice r1GradingStatus is always 'graded' since R1 = 100%
+
+    // 5. Perform SERVER-SIDE secure random selection & option shuffling
     const shuffledBank = secureShuffle(activeQuestions);
     const selectedBank = shuffledBank.slice(0, requiredCount);
 
@@ -1452,7 +1706,11 @@ app.post('/api/quiz/start', async (req, res) => {
       startedAt,
       endsAt,
       status: 'ACTIVE',
-      score: 0
+      score: 0,
+      correctAnswers: 0,
+      participationStatus: 'active',
+      gradingStatus: r1GradingStatus,
+      qualificationStatus: 'not_applicable'
     };
 
     if (isDbConnected) {
@@ -1461,9 +1719,12 @@ app.post('/api/quiz/start', async (req, res) => {
       memoryStore.quizAttempts[participantId] = newAttempt;
     }
 
-    await createAuditLog(participantId, 'PARTICIPANT', 'QUESTION_SET_GENERATED', attemptId, { count: requiredCount });
+    await createAuditLog(participantId, 'PARTICIPANT', 'QUESTION_SET_GENERATED', attemptId, {
+      count: requiredCount,
+      gradingStatus: r1GradingStatus
+    });
 
-    // 5. Build SANITIZED participant payload (NO correctOption, NO explanation)
+    // 6. Build SANITIZED participant payload (NO correctOption, NO explanation)
     const sanitizedQuestions = selectedBank.map((q, idx) => ({
       questionId: q.questionId,
       position: idx + 1,
@@ -1478,6 +1739,8 @@ app.post('/api/quiz/start', async (req, res) => {
       success: true,
       attemptId,
       status: 'ACTIVE',
+      gradingStatus: r1GradingStatus,
+      participationStatus: 'active',
       userAnswers: {},
       startedAt,
       endsAt,
@@ -1524,6 +1787,9 @@ app.get('/api/quiz/current', async (req, res) => {
       hasAttempt: true,
       attemptId: attempt.attemptId,
       status: attempt.status,
+      gradingStatus: attempt.gradingStatus || 'graded',
+      participationStatus: attempt.participationStatus || 'active',
+      isNonGraded: attempt.gradingStatus === 'non_graded',
       userAnswers: attempt.userAnswers || {},
       score: attempt.status === 'SUBMITTED' ? attempt.score : undefined,
       startedAt: attempt.startedAt,
@@ -1575,57 +1841,67 @@ app.post('/api/quiz/submit', async (req, res) => {
       return res.status(404).json({ success: false, message: 'No active attempt found to submit.' });
     }
 
+    // Idempotent: if already submitted, return stored result
     if (attempt.status === 'SUBMITTED') {
-      return res.json({ success: true, message: 'Quiz already submitted.', score: attempt.score });
+      return res.json({
+        success: true,
+        message: 'Quiz already submitted.',
+        score: attempt.score,
+        correctAnswers: attempt.correctAnswers || attempt.score,
+        gradingStatus: attempt.gradingStatus || 'graded',
+        total: attempt.selectedQuestions?.length || 0
+      });
     }
 
-    const answersToEvaluate = userAnswers || (attempt.userAnswers instanceof Map ? Object.fromEntries(attempt.userAnswers) : attempt.userAnswers) || {};
+    const answersToEvaluate = userAnswers ||
+      (attempt.userAnswers instanceof Map ? Object.fromEntries(attempt.userAnswers) : attempt.userAnswers) ||
+      {};
 
     let score = 0;
+    let correctAnswers = 0;
     attempt.selectedQuestions.forEach(sq => {
       const selected = answersToEvaluate[sq.questionId];
       if (selected !== undefined && parseInt(selected) === sq.correctOptionIndex) {
         score += 1;
+        correctAnswers += 1;
       }
     });
 
     const submittedAt = new Date();
+    const gradingStatus = attempt.gradingStatus || 'graded';
 
     if (isDbConnected) {
       attempt.status = 'SUBMITTED';
       attempt.score = score;
+      attempt.correctAnswers = correctAnswers;
       attempt.submittedAt = submittedAt;
+      attempt.participationStatus = 'completed';
       attempt.userAnswers = answersToEvaluate;
       await attempt.save();
-
-      // Record in Submissions model for leaderboard
-      await Submission.create({
-        participantId,
-        problemId: -1,
-        marks: score,
-        status: 'VERIFIED',
-        verifiedAt: submittedAt
-      });
     } else {
       attempt.status = 'SUBMITTED';
       attempt.score = score;
+      attempt.correctAnswers = correctAnswers;
       attempt.submittedAt = submittedAt;
+      attempt.participationStatus = 'completed';
       attempt.userAnswers = answersToEvaluate;
-
-      const subIdx = memoryStore.submissions.findIndex(s => s.participantId === participantId && s.problemId === -1);
-      const sub = { participantId, problemId: -1, marks: score, status: 'VERIFIED', verifiedAt: submittedAt };
-      if (subIdx >= 0) memoryStore.submissions[subIdx] = sub;
-      else memoryStore.submissions.push(sub);
     }
 
-    await createAuditLog(participantId, 'PARTICIPANT', 'QUIZ_SUBMITTED', attempt.attemptId, { score, total: attempt.selectedQuestions.length });
-    io.emit('submission:updated', { participantId, round: 1, score });
+    await createAuditLog(participantId, 'PARTICIPANT', 'QUIZ_SUBMITTED', attempt.attemptId, {
+      score,
+      correctAnswers,
+      total: attempt.selectedQuestions.length,
+      gradingStatus
+    });
+    io.emit('submission:updated', { participantId, round: 1, score, gradingStatus });
 
     res.json({
       success: true,
       message: 'Quiz submitted successfully.',
       score,
-      total: attempt.selectedQuestions.length
+      correctAnswers,
+      total: attempt.selectedQuestions.length,
+      gradingStatus
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -1841,13 +2117,16 @@ app.post('/api/debug/start', async (req, res) => {
       });
     }
 
-    const { qualifiedR2Set } = await computeLeaderboardData();
-    if (qualifiedR2Set.size > 0 && !qualifiedR2Set.has(participantId)) {
-      return res.status(403).json({
-        success: false,
-        message: 'Access Restricted: You have not qualified for Round 2 based on Round 1 leaderboard rankings.'
-      });
-    }
+    // ── PARTICIPATION vs GRADING SEPARATION ──────────────────────────────────
+    // ALL registered participants can enter Round 2 (participation = eligible for everyone).
+    // Only participants in the official graded cohort (top X% from R1) have graded=true.
+    // Non-graded participants can still attempt all problems; their result is stored
+    // but excluded from the official leaderboard and qualification.
+    const { gradedR2Set } = await computeLeaderboardData();
+    // Determine this participant's R2 grading status:
+    // If gradedR2Set is empty (no R1 data yet) → treat as graded (open access mode)
+    // If gradedR2Set is populated  → check membership
+    const r2GradingStatus = (gradedR2Set.size === 0 || gradedR2Set.has(participantId)) ? 'graded' : 'non_graded';
 
     let activeProblems = [];
     if (isDbConnected) activeProblems = await DebugProblem.find({ status: 'ACTIVE' });
@@ -1894,13 +2173,20 @@ app.post('/api/debug/start', async (req, res) => {
         roundId: 'ROUND_2',
         selectedProblemIds: selectedIds,
         startedAt: new Date(),
-        status: 'ACTIVE'
+        status: 'ACTIVE',
+        // ── GRADING STATUS assigned here server-side (cannot be overridden by client) ──
+        participationStatus: 'active',
+        gradingStatus: r2GradingStatus,
+        qualificationStatus: 'not_applicable'
       };
 
       if (isDbConnected) await DebugAttempt.create(newAttempt);
       else memoryStore.debugAttempts[participantId] = newAttempt;
 
       selectedProblems = picked;
+      await createAuditLog(participantId, 'PARTICIPANT', 'ROUND2_STARTED', newAttempt.attemptId, {
+        gradingStatus: r2GradingStatus
+      });
     }
 
     // SANITIZE DEBUG PAYLOAD (Remove solutionSnippet)
@@ -1917,7 +2203,13 @@ app.post('/api/debug/start', async (req, res) => {
       totalProblems: selectedProblems.length
     }));
 
-    res.json({ success: true, problems: sanitizedProblems });
+    res.json({
+      success: true,
+      problems: sanitizedProblems,
+      gradingStatus: existingAttempt?.gradingStatus || r2GradingStatus,
+      participationStatus: 'active',
+      isNonGraded: (existingAttempt?.gradingStatus || r2GradingStatus) === 'non_graded'
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -1975,6 +2267,9 @@ app.get('/api/debug/current', async (req, res) => {
     res.json({ 
       success: true, 
       hasAttempt: true, 
+      gradingStatus: attempt.gradingStatus || 'graded',
+      participationStatus: attempt.participationStatus || 'active',
+      isNonGraded: attempt.gradingStatus === 'non_graded',
       problems: sanitizedProblems, 
       submissions: submissionsMap 
     });
@@ -2028,7 +2323,7 @@ app.get('/api/coordinator/submissions', async (req, res) => {
 });
 
 app.post('/api/coordinator/verify', async (req, res) => {
-  const { problemId, coordinatorId, pin, marks, participantId } = req.body;
+  const { problemId, coordinatorId, pin, marks, participantId, rubricBreakdown } = req.body;
 
   try {
     let coordinator = null;
@@ -2046,10 +2341,13 @@ app.post('/api/coordinator/verify', async (req, res) => {
       return res.status(401).json({ success: false, message: 'Invalid Coordinator Authorization PIN.' });
     }
 
+    const numericMarks = Number(parseFloat(marks ?? 0).toFixed(1));
+
     const update = {
       status: 'VERIFIED',
       verifiedBy: coordinatorId,
-      marks: parseInt(marks),
+      marks: numericMarks,
+      rubricBreakdown: rubricBreakdown || {},
       verifiedAt: new Date()
     };
 
@@ -2065,7 +2363,7 @@ app.post('/api/coordinator/verify', async (req, res) => {
       else memoryStore.submissions.push({ participantId, problemId: parseInt(problemId), ...update });
     }
 
-    await createAuditLog(coordinatorId, 'COORDINATOR', 'DEBUG_SUBMISSION_VERIFIED', problemId, { participantId, marks });
+    await createAuditLog(coordinatorId, 'COORDINATOR', 'DEBUG_SUBMISSION_VERIFIED', problemId, { participantId, marks: numericMarks, rubricBreakdown });
     io.emit('verification:updated', { participantId, problemId, ...update });
     res.json({ success: true, message: 'Verification recorded successfully.', update });
   } catch (err) {
@@ -2271,13 +2569,12 @@ app.post('/api/hunt/start', async (req, res) => {
       });
     }
 
-    const { qualifiedR3Set } = await computeLeaderboardData();
-    if (qualifiedR3Set.size > 0 && !qualifiedR3Set.has(participantId)) {
-      return res.status(403).json({
-        success: false,
-        message: 'Access Restricted: You have not qualified for Round 3 Finals based on cumulative round rankings.'
-      });
-    }
+    // ── PARTICIPATION vs GRADING SEPARATION ──────────────────────────────────
+    // ALL registered participants can enter Round 3 (participation = eligible for everyone).
+    // Only participants in the official graded cohort (top X% from R2 official leaderboard)
+    // have gradingStatus = 'graded'. Non-graded participants can still attempt all clues.
+    const { gradedR3Set } = await computeLeaderboardData();
+    const r3GradingStatus = (gradedR3Set.size === 0 || gradedR3Set.has(participantId)) ? 'graded' : 'non_graded';
 
     let activeClues = [];
     if (isDbConnected) activeClues = await TechClue.find({ status: 'ACTIVE' }).sort({ station: 1, order: 1 });
@@ -2306,15 +2603,44 @@ app.post('/api/hunt/start', async (req, res) => {
         selectedClueIds: selectedIds,
         currentClueIndex: 0,
         solvedClueIds: [],
+        skippedClueIds: [],
         hintsUsed: {},
         answers: {},
+        incorrectAttempts: {},
         score: 0,
         startedAt: new Date(),
-        status: 'ACTIVE'
+        status: 'ACTIVE',
+        // ── GRADING STATUS assigned here server-side (cannot be overridden by client) ──
+        participationStatus: 'active',
+        gradingStatus: r3GradingStatus,
+        qualificationStatus: 'not_applicable'
       };
 
       if (isDbConnected) await HuntAttempt.create(existingAttempt);
       else memoryStore.huntAttempts[participantId] = existingAttempt;
+
+      await createAuditLog(participantId, 'PARTICIPANT', 'ROUND3_STARTED', attemptId, {
+        gradingStatus: r3GradingStatus
+      });
+    }
+
+    const isCompleted = existingAttempt.status === 'COMPLETED' || existingAttempt.currentClueIndex >= existingAttempt.selectedClueIds.length;
+    if (isCompleted) {
+      return res.json({
+        success: true,
+        hasAttempt: true,
+        isCompleted: true,
+        currentStep: existingAttempt.selectedClueIds.length,
+        totalSteps: existingAttempt.selectedClueIds.length,
+        selectedClueIds: existingAttempt.selectedClueIds || [],
+        solvedClueIds: existingAttempt.solvedClueIds || [],
+        skippedClueIds: existingAttempt.skippedClueIds || [],
+        score: existingAttempt.score,
+        gradingStatus: existingAttempt.gradingStatus || r3GradingStatus,
+        participationStatus: 'completed',
+        isNonGraded: (existingAttempt.gradingStatus || r3GradingStatus) === 'non_graded',
+        clue: null
+      });
     }
 
     const currentClueId = existingAttempt.selectedClueIds[existingAttempt.currentClueIndex];
@@ -2324,13 +2650,22 @@ app.post('/api/hunt/start', async (req, res) => {
       return res.status(404).json({ success: false, message: 'Current clue station not found.' });
     }
 
+    const hintsMap = existingAttempt.hintsUsed instanceof Map ? Object.fromEntries(existingAttempt.hintsUsed) : (existingAttempt.hintsUsed || {});
+
     // SANITIZE CLUE PAYLOAD (Never expose answer)
     res.json({
       success: true,
+      hasAttempt: true,
+      isCompleted: false,
       currentStep: existingAttempt.currentClueIndex + 1,
       totalSteps: existingAttempt.selectedClueIds.length,
+      selectedClueIds: existingAttempt.selectedClueIds || [],
       solvedClueIds: existingAttempt.solvedClueIds || [],
+      skippedClueIds: existingAttempt.skippedClueIds || [],
       score: existingAttempt.score,
+      gradingStatus: existingAttempt.gradingStatus || r3GradingStatus,
+      participationStatus: 'active',
+      isNonGraded: (existingAttempt.gradingStatus || r3GradingStatus) === 'non_graded',
       clue: {
         clueId: targetClue.clueId || targetClue.id,
         station: targetClue.station,
@@ -2339,7 +2674,7 @@ app.post('/api/hunt/start', async (req, res) => {
         clueText: targetClue.clueText ?? targetClue.description,
         marks: targetClue.marks || 10,
         hasHint: Boolean(targetClue.hint),
-        hint: existingAttempt.hintsUsed[targetClue.clueId || targetClue.id] ? targetClue.hint : null
+        hint: hintsMap[targetClue.clueId || targetClue.id] ? targetClue.hint : null
       }
     });
   } catch (err) {
@@ -2365,11 +2700,44 @@ app.get('/api/hunt/current', async (req, res) => {
 
     if (!attempt) return res.json({ success: true, hasAttempt: false });
 
+    const isCompleted = attempt.status === 'COMPLETED' || attempt.currentClueIndex >= attempt.selectedClueIds.length;
+    if (isCompleted) {
+      return res.json({
+        success: true,
+        hasAttempt: true,
+        isCompleted: true,
+        gradingStatus: attempt.gradingStatus || 'graded',
+        participationStatus: attempt.participationStatus || 'completed',
+        isNonGraded: attempt.gradingStatus === 'non_graded',
+        currentStep: attempt.selectedClueIds.length,
+        totalSteps: attempt.selectedClueIds.length,
+        selectedClueIds: attempt.selectedClueIds || [],
+        solvedClueIds: attempt.solvedClueIds || [],
+        skippedClueIds: attempt.skippedClueIds || [],
+        score: attempt.score,
+        clue: null
+      });
+    }
+
     const currentClueId = attempt.selectedClueIds[attempt.currentClueIndex];
     const targetClue = activeClues.find(c => (c.clueId || c.id) === currentClueId);
 
     if (!targetClue) {
-      return res.json({ success: true, hasAttempt: true, isCompleted: true, score: attempt.score });
+      return res.json({
+        success: true,
+        hasAttempt: true,
+        isCompleted: true,
+        gradingStatus: attempt.gradingStatus || 'graded',
+        participationStatus: attempt.participationStatus || 'completed',
+        isNonGraded: attempt.gradingStatus === 'non_graded',
+        currentStep: attempt.selectedClueIds.length,
+        totalSteps: attempt.selectedClueIds.length,
+        selectedClueIds: attempt.selectedClueIds || [],
+        solvedClueIds: attempt.solvedClueIds || [],
+        skippedClueIds: attempt.skippedClueIds || [],
+        score: attempt.score,
+        clue: null
+      });
     }
 
     const hintsMap = attempt.hintsUsed instanceof Map ? Object.fromEntries(attempt.hintsUsed) : (attempt.hintsUsed || {});
@@ -2377,10 +2745,15 @@ app.get('/api/hunt/current', async (req, res) => {
     res.json({
       success: true,
       hasAttempt: true,
-      isCompleted: attempt.status === 'COMPLETED',
+      isCompleted: false,
+      gradingStatus: attempt.gradingStatus || 'graded',
+      participationStatus: attempt.participationStatus || 'active',
+      isNonGraded: attempt.gradingStatus === 'non_graded',
       currentStep: attempt.currentClueIndex + 1,
       totalSteps: attempt.selectedClueIds.length,
+      selectedClueIds: attempt.selectedClueIds || [],
       solvedClueIds: attempt.solvedClueIds || [],
+      skippedClueIds: attempt.skippedClueIds || [],
       score: attempt.score,
       clue: {
         clueId: targetClue.clueId || targetClue.id,
@@ -2401,16 +2774,21 @@ app.get('/api/hunt/current', async (req, res) => {
 app.post('/api/hunt/:clueId/answer', async (req, res) => {
   const { clueId } = req.params;
   const { participantId, answer } = req.body;
+  const cIdNum = parseInt(clueId);
+
+  if (!participantId) {
+    return res.status(400).json({ success: false, message: 'Participant ID required.' });
+  }
 
   try {
     let clue = null;
     let attempt = null;
 
     if (isDbConnected) {
-      clue = await TechClue.findOne({ $or: [{ clueId: parseInt(clueId) }, { id: parseInt(clueId) }] });
+      clue = await TechClue.findOne({ $or: [{ clueId: cIdNum }, { id: cIdNum }] });
       attempt = await HuntAttempt.findOne({ participantId });
     } else {
-      clue = memoryStore.techClues.find(c => c.clueId === parseInt(clueId) || c.id === parseInt(clueId));
+      clue = memoryStore.techClues.find(c => c.clueId === cIdNum || c.id === cIdNum);
       attempt = memoryStore.huntAttempts[participantId];
     }
 
@@ -2418,36 +2796,189 @@ app.post('/api/hunt/:clueId/answer', async (req, res) => {
       return res.status(404).json({ success: false, message: 'Clue or attempt not found.' });
     }
 
+    if (attempt.status === 'COMPLETED' || attempt.currentClueIndex >= attempt.selectedClueIds.length) {
+      return res.status(400).json({ success: false, message: 'Round 3 hunt is already completed.' });
+    }
+
+    // Security check: Participant cannot answer questions other than their currently active station!
+    const activeClueId = attempt.selectedClueIds[attempt.currentClueIndex];
+    if (activeClueId !== cIdNum) {
+      return res.status(403).json({
+        success: false,
+        message: 'This station is not your currently active clue.'
+      });
+    }
+
+    // Prevent re-answering already solved or skipped clues
+    if (attempt.solvedClueIds && attempt.solvedClueIds.includes(cIdNum)) {
+      return res.status(400).json({ success: false, message: 'This clue has already been solved.' });
+    }
+    if (attempt.skippedClueIds && attempt.skippedClueIds.includes(cIdNum)) {
+      return res.status(400).json({ success: false, message: 'This clue has already been skipped.' });
+    }
+
     const isCorrect = answer && String(answer).trim().toUpperCase() === String(clue.answer).trim().toUpperCase();
 
     if (isCorrect) {
-      const cIdNum = parseInt(clueId);
-      if (!attempt.solvedClueIds.includes(cIdNum)) {
-        attempt.solvedClueIds.push(cIdNum);
+      if (!attempt.solvedClueIds) attempt.solvedClueIds = [];
+      attempt.solvedClueIds.push(cIdNum);
 
-        const hintsMap = attempt.hintsUsed instanceof Map ? Object.fromEntries(attempt.hintsUsed) : (attempt.hintsUsed || {});
-        const hintPenalty = hintsMap[cIdNum] ? (clue.hintPenalty || 2) : 0;
-        const awardedMarks = Math.max(0, (clue.marks || 10) - hintPenalty);
-        attempt.score += awardedMarks;
-
-        if (attempt.currentClueIndex + 1 >= attempt.selectedClueIds.length) {
-          attempt.status = 'COMPLETED';
-        } else {
-          attempt.currentClueIndex += 1;
-        }
-
-        if (isDbConnected) await attempt.save();
+      // Record answer
+      if (isDbConnected && attempt.answers instanceof Map) {
+        attempt.answers.set(String(cIdNum), String(answer).trim());
+      } else {
+        attempt.answers = attempt.answers || {};
+        attempt.answers[cIdNum] = String(answer).trim();
       }
+
+      const hintsMap = attempt.hintsUsed instanceof Map ? Object.fromEntries(attempt.hintsUsed) : (attempt.hintsUsed || {});
+      const hintPenalty = hintsMap[cIdNum] ? (clue.hintPenalty || 2) : 0;
+      const awardedMarks = Math.max(0, (clue.marks || 10) - hintPenalty);
+      attempt.score += awardedMarks;
+
+      if (attempt.currentClueIndex + 1 >= attempt.selectedClueIds.length) {
+        attempt.status = 'COMPLETED';
+        attempt.participationStatus = 'completed';
+      } else {
+        attempt.currentClueIndex += 1;
+      }
+
+      if (isDbConnected) {
+        await attempt.save();
+      }
+
+      await createAuditLog(participantId, 'PARTICIPANT', 'ROUND3_CLUE_SOLVED', attempt.attemptId, {
+        clueId: cIdNum,
+        score: attempt.score,
+        isCompleted: attempt.status === 'COMPLETED'
+      });
 
       return res.json({
         success: true,
         correct: true,
         score: attempt.score,
+        currentStep: attempt.currentClueIndex + 1,
+        totalSteps: attempt.selectedClueIds.length,
+        solvedClueIds: attempt.solvedClueIds || [],
+        skippedClueIds: attempt.skippedClueIds || [],
         isCompleted: attempt.status === 'COMPLETED'
       });
     }
 
-    res.json({ success: true, correct: false, message: 'Incorrect answer.' });
+    // INCORRECT ANSWER:
+    // Do NOT block participant. Record incorrect attempt and keep clue available for retry or skip.
+    if (isDbConnected && attempt.incorrectAttempts instanceof Map) {
+      const prevCount = attempt.incorrectAttempts.get(String(cIdNum)) || 0;
+      attempt.incorrectAttempts.set(String(cIdNum), prevCount + 1);
+      await attempt.save();
+    } else {
+      attempt.incorrectAttempts = attempt.incorrectAttempts || {};
+      attempt.incorrectAttempts[cIdNum] = (attempt.incorrectAttempts[cIdNum] || 0) + 1;
+    }
+
+    await createAuditLog(participantId, 'PARTICIPANT', 'ROUND3_INCORRECT_ATTEMPT', attempt.attemptId, {
+      clueId: cIdNum,
+      attemptedAnswer: String(answer).trim().slice(0, 100)
+    });
+
+    res.json({
+      success: true,
+      correct: false,
+      message: 'Incorrect answer. You can re-examine the station clue and try again, or skip to move to the next station.'
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Round 3 Skip / Pass Mechanism
+app.post('/api/hunt/:clueId/skip', async (req, res) => {
+  const { clueId } = req.params;
+  const { participantId } = req.body;
+  const cIdNum = parseInt(clueId);
+
+  if (!participantId) {
+    return res.status(400).json({ success: false, message: 'Participant ID required.' });
+  }
+
+  try {
+    let clue = null;
+    let attempt = null;
+
+    if (isDbConnected) {
+      clue = await TechClue.findOne({ $or: [{ clueId: cIdNum }, { id: cIdNum }] });
+      attempt = await HuntAttempt.findOne({ participantId });
+    } else {
+      clue = memoryStore.techClues.find(c => c.clueId === cIdNum || c.id === cIdNum);
+      attempt = memoryStore.huntAttempts[participantId];
+    }
+
+    if (!clue || !attempt) {
+      return res.status(404).json({ success: false, message: 'Clue or attempt not found.' });
+    }
+
+    if (attempt.status === 'COMPLETED' || attempt.currentClueIndex >= attempt.selectedClueIds.length) {
+      return res.status(400).json({ success: false, message: 'Round 3 hunt is already completed.' });
+    }
+
+    // Security check: Participant cannot skip questions other than their currently active station!
+    const activeClueId = attempt.selectedClueIds[attempt.currentClueIndex];
+    if (activeClueId !== cIdNum) {
+      return res.status(403).json({
+        success: false,
+        message: 'This station is not your currently active clue.'
+      });
+    }
+
+    // Prevent skipping an already solved clue
+    if (attempt.solvedClueIds && attempt.solvedClueIds.includes(cIdNum)) {
+      return res.status(400).json({ success: false, message: 'Cannot skip an already solved clue.' });
+    }
+
+    // Record as skipped (no duplicate entries)
+    if (!attempt.skippedClueIds) attempt.skippedClueIds = [];
+    if (!attempt.skippedClueIds.includes(cIdNum)) {
+      attempt.skippedClueIds.push(cIdNum);
+    }
+
+    // Record answer in attempts as skipped
+    if (isDbConnected && attempt.answers instanceof Map) {
+      attempt.answers.set(String(cIdNum), '[SKIPPED]');
+    } else {
+      attempt.answers = attempt.answers || {};
+      attempt.answers[cIdNum] = '[SKIPPED]';
+    }
+
+    // Progression:
+    // Skipping does NOT award points (score remains unchanged).
+    if (attempt.currentClueIndex + 1 >= attempt.selectedClueIds.length) {
+      attempt.status = 'COMPLETED';
+      attempt.participationStatus = 'completed';
+    } else {
+      attempt.currentClueIndex += 1;
+    }
+
+    if (isDbConnected) {
+      await attempt.save();
+    }
+
+    await createAuditLog(participantId, 'PARTICIPANT', 'ROUND3_CLUE_SKIPPED', attempt.attemptId, {
+      clueId: cIdNum,
+      score: attempt.score,
+      isCompleted: attempt.status === 'COMPLETED'
+    });
+
+    return res.json({
+      success: true,
+      skipped: true,
+      score: attempt.score,
+      currentStep: attempt.currentClueIndex + 1,
+      totalSteps: attempt.selectedClueIds.length,
+      solvedClueIds: attempt.solvedClueIds || [],
+      skippedClueIds: attempt.skippedClueIds || [],
+      isCompleted: attempt.status === 'COMPLETED',
+      message: 'Station skipped. Advancing to next clue.'
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -2456,22 +2987,28 @@ app.post('/api/hunt/:clueId/answer', async (req, res) => {
 app.post('/api/hunt/:clueId/hint', async (req, res) => {
   const { clueId } = req.params;
   const { participantId } = req.body;
+  const cIdNum = parseInt(clueId);
 
   try {
     let clue = null;
     let attempt = null;
 
     if (isDbConnected) {
-      clue = await TechClue.findOne({ $or: [{ clueId: parseInt(clueId) }, { id: parseInt(clueId) }] });
+      clue = await TechClue.findOne({ $or: [{ clueId: cIdNum }, { id: cIdNum }] });
       attempt = await HuntAttempt.findOne({ participantId });
     } else {
-      clue = memoryStore.techClues.find(c => c.clueId === parseInt(clueId) || c.id === parseInt(clueId));
+      clue = memoryStore.techClues.find(c => c.clueId === cIdNum || c.id === cIdNum);
       attempt = memoryStore.huntAttempts[participantId];
     }
 
     if (!clue || !attempt) return res.status(404).json({ success: false, message: 'Clue or attempt not found.' });
 
-    const cIdNum = parseInt(clueId);
+    // Validate active station
+    const activeClueId = attempt.selectedClueIds[attempt.currentClueIndex];
+    if (activeClueId !== cIdNum) {
+      return res.status(403).json({ success: false, message: 'Clue is not your active station.' });
+    }
+
     if (isDbConnected) {
       attempt.hintsUsed.set(String(cIdNum), true);
       await attempt.save();
@@ -2551,6 +3088,57 @@ app.post('/api/anticheat/log', async (req, res) => {
 
     io.emit('anticheat:flag', log);
     res.json({ success: true, log });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/anticheat/disqualify', async (req, res) => {
+  const { participantId, round, reason } = req.body;
+  try {
+    const timestamp = new Date();
+    const log = {
+      participantId,
+      type: 'DISQUALIFIED_MALPRACTICE',
+      message: reason || `Participant disqualified from round ${round || 'ALL'} due to 3 anti-cheat violations`,
+      timestamp: timestamp.toLocaleTimeString()
+    };
+
+    if (isDbConnected) {
+      await AntiCheatLog.create(log);
+      await User.findOneAndUpdate({ id: participantId }, { accountStatus: 'DISQUALIFIED' });
+      if (round === 1 || round === '1' || round === 'ROUND_1') {
+        await QuizAttempt.findOneAndUpdate({ participantId }, { status: 'DISQUALIFIED', participationStatus: 'disqualified' });
+      } else if (round === 2 || round === '2' || round === 'ROUND_2') {
+        await DebugAttempt.findOneAndUpdate({ participantId }, { status: 'DISQUALIFIED', participationStatus: 'disqualified' });
+      } else if (round === 3 || round === '3' || round === 'ROUND_3') {
+        await HuntAttempt.findOneAndUpdate({ participantId }, { status: 'DISQUALIFIED', participationStatus: 'disqualified' });
+      } else {
+        await QuizAttempt.findOneAndUpdate({ participantId }, { status: 'DISQUALIFIED', participationStatus: 'disqualified' });
+        await DebugAttempt.findOneAndUpdate({ participantId }, { status: 'DISQUALIFIED', participationStatus: 'disqualified' });
+        await HuntAttempt.findOneAndUpdate({ participantId }, { status: 'DISQUALIFIED', participationStatus: 'disqualified' });
+      }
+    } else {
+      memoryStore.antiCheatLogs.push({ id: memoryStore.antiCheatLogs.length + 1, ...log });
+      const u = memoryStore.users.find(usr => usr.id === participantId);
+      if (u) u.accountStatus = 'DISQUALIFIED';
+      if (memoryStore.quizAttempts[participantId]) {
+        memoryStore.quizAttempts[participantId].status = 'DISQUALIFIED';
+        memoryStore.quizAttempts[participantId].participationStatus = 'disqualified';
+      }
+      if (memoryStore.debugAttempts[participantId]) {
+        memoryStore.debugAttempts[participantId].status = 'DISQUALIFIED';
+        memoryStore.debugAttempts[participantId].participationStatus = 'disqualified';
+      }
+      if (memoryStore.huntAttempts[participantId]) {
+        memoryStore.huntAttempts[participantId].status = 'DISQUALIFIED';
+        memoryStore.huntAttempts[participantId].participationStatus = 'disqualified';
+      }
+    }
+
+    io.emit('anticheat:flag', log);
+    io.emit('participant:disqualified', { participantId, round, reason });
+    res.json({ success: true, message: `Participant ${participantId} disqualified and frozen.` });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

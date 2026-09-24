@@ -13,7 +13,6 @@ import {
   EyeOff, 
   Sparkles,
   ShieldCheck,
-  ShieldAlert,
   CheckCircle2,
   ChevronLeft
 } from 'lucide-react';

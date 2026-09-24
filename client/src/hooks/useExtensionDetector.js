@@ -67,12 +67,14 @@ const WAR_PROBES = [
 export function useExtensionDetector() {
   const [detectedExtensions, setDetectedExtensions] = useState([]);
   const [isScanning, setIsScanning] = useState(true);
-  const [lastScanTime, setLastScanTime] = useState(Date.now());
+  const [lastScanTime, setLastScanTime] = useState(() => Date.now());
   const [scanCount, setScanCount] = useState(0);
   const isMounted = useRef(true);
 
-  const scanForExtensions = useCallback(async () => {
-    setIsScanning(true);
+  const scanForExtensions = useCallback(async (isManual = false) => {
+    if (isManual) {
+      setIsScanning(true);
+    }
     const findings = [];
     const seenNames = new Set();
 
@@ -228,7 +230,9 @@ export function useExtensionDetector() {
   // Set up live continuous monitoring with MutationObserver + Polling Interval
   useEffect(() => {
     isMounted.current = true;
-    scanForExtensions();
+    const initialTimer = setTimeout(() => {
+      scanForExtensions();
+    }, 0);
 
     // DOM Mutation Observer for real-time detection of injected scripts/elements
     let observer = null;
@@ -254,6 +258,7 @@ export function useExtensionDetector() {
 
     return () => {
       isMounted.current = false;
+      clearTimeout(initialTimer);
       if (observer) {
         observer.disconnect();
       }

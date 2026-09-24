@@ -10,7 +10,7 @@ const userSchema = new mongoose.Schema({
   year: { type: String, default: '' },
   role: { type: String, enum: ['PARTICIPANT', 'COORDINATOR', 'ADMIN'], default: 'PARTICIPANT' },
   password: { type: String, required: true },
-  accountStatus: { type: String, enum: ['ACTIVE', 'LOCKED', 'SUSPENDED', 'PENDING'], default: 'ACTIVE' },
+  accountStatus: { type: String, enum: ['ACTIVE', 'LOCKED', 'SUSPENDED', 'PENDING', 'DISQUALIFIED'], default: 'ACTIVE' },
   assignedRound: { type: String, default: '' },
   assignedCoordinator: { type: String, default: '' },
   pin: { type: String, default: '' },
@@ -37,6 +37,19 @@ const eventStateSchema = new mongoose.Schema({
       'SASTRA Deemed University',
       'Government College of Engineering'
     ] 
+  },
+  // ─── NEW: Per-round grading percentage configuration ─────────────────────────
+  // gradingPercentage: the % of ranked participants who are "officially graded" in that round.
+  // 100 = all participants are graded (Round 1 default)
+  // 80  = top 80% by R1 leaderboard are graded in Round 2, remaining 20% are non_graded
+  // 50  = top 50% by R2 leaderboard are graded in Round 3, remaining 50% are non_graded
+  roundGradingConfig: {
+    type: mongoose.Schema.Types.Mixed,
+    default: {
+      1: { gradingPercentage: 100 },
+      2: { gradingPercentage: 80 },
+      3: { gradingPercentage: 50 }
+    }
   }
 }, { timestamps: true });
 
@@ -72,8 +85,32 @@ const quizAttemptSchema = new mongoose.Schema({
   startedAt: { type: Date, default: Date.now },
   endsAt: { type: Date },
   submittedAt: { type: Date, default: null },
-  status: { type: String, enum: ['ACTIVE', 'SUBMITTED', 'EXPIRED'], default: 'ACTIVE' },
-  score: { type: Number, default: 0 }
+  status: { type: String, enum: ['ACTIVE', 'SUBMITTED', 'EXPIRED', 'DISQUALIFIED'], default: 'ACTIVE' },
+  score: { type: Number, default: 0 },
+  correctAnswers: { type: Number, default: 0 },
+  // ─── NEW: Participation & Grading separation ────────────────────────────────
+  // participationStatus: whether the participant is allowed to attend this round
+  //   eligible | active | completed | not_started | disqualified
+  participationStatus: {
+    type: String,
+    enum: ['eligible', 'active', 'completed', 'not_started', 'disqualified'],
+    default: 'eligible'
+  },
+  // gradingStatus: whether this attempt counts toward official leaderboard
+  //   graded    → attempt affects official score, rank, qualification
+  //   non_graded → attempt is stored but excluded from official leaderboard
+  gradingStatus: {
+    type: String,
+    enum: ['graded', 'non_graded'],
+    default: 'graded'
+  },
+  // qualificationStatus: result of this round for next-round cohort determination
+  //   qualified | not_qualified | not_applicable
+  qualificationStatus: {
+    type: String,
+    enum: ['qualified', 'not_qualified', 'not_applicable'],
+    default: 'not_applicable'
+  }
 }, { timestamps: true });
 
 // DebugProblem Schema (Round 2)
@@ -103,7 +140,23 @@ const debugAttemptSchema = new mongoose.Schema({
   selectedProblemIds: [{ type: Number }],
   startedAt: { type: Date, default: Date.now },
   endsAt: { type: Date },
-  status: { type: String, enum: ['ACTIVE', 'COMPLETED'], default: 'ACTIVE' }
+  status: { type: String, enum: ['ACTIVE', 'COMPLETED', 'DISQUALIFIED'], default: 'ACTIVE' },
+  // ─── NEW: Participation & Grading separation ────────────────────────────────
+  participationStatus: {
+    type: String,
+    enum: ['eligible', 'active', 'completed', 'not_started', 'disqualified'],
+    default: 'eligible'
+  },
+  gradingStatus: {
+    type: String,
+    enum: ['graded', 'non_graded'],
+    default: 'graded'
+  },
+  qualificationStatus: {
+    type: String,
+    enum: ['qualified', 'not_qualified', 'not_applicable'],
+    default: 'not_applicable'
+  }
 }, { timestamps: true });
 
 // TechClue Schema (Round 3)
@@ -132,12 +185,30 @@ const huntAttemptSchema = new mongoose.Schema({
   selectedClueIds: [{ type: Number }],
   currentClueIndex: { type: Number, default: 0 },
   solvedClueIds: [{ type: Number }],
+  skippedClueIds: [{ type: Number }],
   hintsUsed: { type: Map, of: Boolean, default: {} },
   answers: { type: Map, of: String, default: {} },
+  incorrectAttempts: { type: Map, of: Number, default: {} },
   score: { type: Number, default: 0 },
   startedAt: { type: Date, default: Date.now },
   endsAt: { type: Date },
-  status: { type: String, enum: ['ACTIVE', 'COMPLETED'], default: 'ACTIVE' }
+  status: { type: String, enum: ['ACTIVE', 'COMPLETED', 'DISQUALIFIED'], default: 'ACTIVE' },
+  // ─── NEW: Participation & Grading separation ────────────────────────────────
+  participationStatus: {
+    type: String,
+    enum: ['eligible', 'active', 'completed', 'not_started', 'disqualified'],
+    default: 'eligible'
+  },
+  gradingStatus: {
+    type: String,
+    enum: ['graded', 'non_graded'],
+    default: 'graded'
+  },
+  qualificationStatus: {
+    type: String,
+    enum: ['qualified', 'not_qualified', 'not_applicable'],
+    default: 'not_applicable'
+  }
 }, { timestamps: true });
 
 // Submission / Verification Schema (Round 2 Physical Verification)
@@ -149,7 +220,10 @@ const submissionSchema = new mongoose.Schema({
   status: { type: String, enum: ['NOT_STARTED', 'WORKING', 'SUBMITTED', 'WAITING_VERIFICATION', 'VERIFIED', 'LOCKED'], default: 'NOT_STARTED' },
   verifiedBy: { type: String, default: null },
   marks: { type: Number, default: 0 },
-  verifiedAt: { type: Date, default: null }
+  verifiedAt: { type: Date, default: null },
+  // gradingStatus inherited from participant's DebugAttempt; stored here for leaderboard filtering
+  gradingStatus: { type: String, enum: ['graded', 'non_graded'], default: 'graded' },
+  rubricBreakdown: { type: mongoose.Schema.Types.Mixed, default: {} }
 }, { timestamps: true });
 
 // Announcement Schema

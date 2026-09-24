@@ -25,7 +25,9 @@ export default function Round2Debug() {
     leaderboard,
     isRoundUnlocked,
     setCurrentScreen,
-    eventState
+    eventState,
+    warningCount,
+    requestFullScreen
   } = useApp();
 
   const [problems, setProblems] = useState([]);
@@ -35,16 +37,13 @@ export default function Round2Debug() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [gradingStatus, setGradingStatus] = useState(null);
 
-  // Sync real-time verification status from AppContext
-  useEffect(() => {
-    if (debugSubmissions && Object.keys(debugSubmissions).length > 0) {
-      setSubmissions(prev => ({
-        ...prev,
-        ...debugSubmissions
-      }));
-    }
-  }, [debugSubmissions]);
+  // Merge real-time verification status from AppContext with local submissions
+  const mergedSubmissions = {
+    ...submissions,
+    ...(debugSubmissions || {})
+  };
 
   useEffect(() => {
     const initDebug = async () => {
@@ -57,6 +56,9 @@ export default function Round2Debug() {
           setProblems(checkData.problems || []);
           if (checkData.submissions) {
             setSubmissions(checkData.submissions);
+          }
+          if (checkData.gradingStatus) {
+            setGradingStatus(checkData.gradingStatus);
           }
           setIsLoading(false);
           return;
@@ -74,6 +76,9 @@ export default function Round2Debug() {
           if (startData.submissions) {
             setSubmissions(startData.submissions);
           }
+          if (startData.gradingStatus) {
+            setGradingStatus(startData.gradingStatus);
+          }
         } else {
           setErrorMessage(startData.message);
         }
@@ -85,8 +90,12 @@ export default function Round2Debug() {
       }
     };
 
+    if (typeof requestFullScreen === 'function') {
+      requestFullScreen();
+    }
+
     initDebug();
-  }, [currentUser]);
+  }, [currentUser, requestFullScreen]);
 
   const [allDebugBank, setAllDebugBank] = useState([]);
   const [selectedBonusLang, setSelectedBonusLang] = useState('Python');
@@ -118,7 +127,7 @@ export default function Round2Debug() {
   const currentProbKey = displayedProblem?.problemId || (currentProbIdx + 1);
   const currentCode = userDrafts[currentProbKey] !== undefined 
     ? userDrafts[currentProbKey] 
-    : (submissions[currentProbKey]?.code || '');
+    : (mergedSubmissions[currentProbKey]?.code || '');
 
   const handleCopyCode = () => {
     if (displayedProblem?.brokenCode) {
@@ -182,7 +191,7 @@ export default function Round2Debug() {
     }
   };
 
-  const subState = displayedProblem ? (submissions[displayedProblem.problemId] || { status: 'NOT_STARTED' }) : { status: 'NOT_STARTED' };
+  const subState = displayedProblem ? (mergedSubmissions[displayedProblem.problemId] || { status: 'NOT_STARTED' }) : { status: 'NOT_STARTED' };
 
   if (!isRoundUnlocked(2)) {
     return (
@@ -242,14 +251,37 @@ export default function Round2Debug() {
                 <span className="text-[10px] font-mono font-bold text-[#D60303] uppercase tracking-widest">ROUND 2</span>
                 <h2 className="text-lg font-bold text-zinc-900 dark:text-white">DEBUG IT — CODE DEBUGGING</h2>
               </div>
+              {/* Grading Status Badge */}
+              {gradingStatus && (
+                <span className={`px-2.5 py-1 rounded-full text-[10px] font-mono font-bold border ${
+                  gradingStatus === 'graded'
+                    ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30'
+                    : 'bg-amber-500/10 text-amber-600 border-amber-500/30'
+                }`}>
+                  {gradingStatus === 'graded' ? '✓ Graded Official' : '◎ Non-Graded'}
+                </span>
+              )}
             </div>
 
             <div className="flex items-center gap-2 font-mono text-xs">
+              <span className={`px-2.5 py-1 rounded-full text-[10px] font-mono font-bold border ${warningCount > 0 ? 'bg-amber-500/10 text-amber-600 border-amber-500/30' : 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30'}`}>
+                Anti-Cheat Warnings: {warningCount || 0}/3
+              </span>
               <span className="px-3 py-1 rounded-full bg-[#A30B1A] text-white font-bold shadow-2xs">
                 Assigned: {problems.length} Workstations (3 Graded + 1 Bonus Practice)
               </span>
             </div>
           </div>
+
+          {/* Non-Graded Info Banner */}
+          {gradingStatus === 'non_graded' && (
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex items-center gap-3 animate-slide-up">
+              <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+              <p className="text-xs text-amber-700 dark:text-amber-400">
+                <strong>Non-Graded Participation:</strong> You are participating in Round 2 for practice and skill verification. Your code will be reviewed and verified by lab coordinators, but your score will not alter the official tournament leaderboard or rankings.
+              </p>
+            </div>
+          )}
 
           {isLoading ? (
             <div className="bg-white/80 dark:bg-[#141417]/80 backdrop-blur-md p-12 rounded-2xl text-center border border-zinc-200/80 dark:border-zinc-800/80">
@@ -414,7 +446,7 @@ export default function Round2Debug() {
                       const isCurrent = idx === currentProbIdx;
                       const isBonus = idx === 3 || p.isBonus;
                       const pKey = p.problemId || (idx + 1);
-                      const pSub = submissions[pKey];
+                      const pSub = mergedSubmissions[pKey];
                       const isVerified = pSub?.status === 'VERIFIED';
                       const isSubmitted = pSub?.status === 'SUBMITTED';
 

@@ -12,6 +12,7 @@ import Round3Hunt from './pages/Round3Hunt';
 import AdminPortal from './pages/AdminPortal';
 import CoordinatorPortal from './pages/CoordinatorPortal';
 import CoordinatorModal from './components/CoordinatorModal';
+import DisqualificationModal from './components/DisqualificationModal';
 
 function GlobalSecurityWrapper({ children }) {
   useEffect(() => {
@@ -113,6 +114,7 @@ export default function App() {
         <CinematicParticleCanvas />
         <MainContent />
         <CoordinatorModal />
+        <DisqualificationModal />
       </GlobalSecurityWrapper>
     </AppProvider>
   );

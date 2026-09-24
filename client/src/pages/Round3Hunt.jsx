@@ -11,11 +11,24 @@ import {
   AlertTriangle,
   Lock,
   Trophy,
-  Sparkles
+  Sparkles,
+  SkipForward
 } from 'lucide-react';
 
 export default function Round3Hunt() {
-  const { currentUser, fetchLeaderboard, setCurrentScreen, requestFullScreen, isOffline, leaderboard, isRoundUnlocked, eventState } = useApp();
+  const { 
+    currentUser, 
+    fetchLeaderboard, 
+    setCurrentScreen, 
+    requestFullScreen, 
+    isOffline, 
+    leaderboard, 
+    isRoundUnlocked, 
+    eventState,
+    warningCount,
+    isOfflineReconnectionEligible,
+    isDisqualified
+  } = useApp();
 
   const [isFullscreenActive, setIsFullscreenActive] = useState(
     !!(document.fullscreenElement || document.webkitFullscreenElement)
@@ -44,6 +57,9 @@ export default function Round3Hunt() {
   const [participantAnswer, setParticipantAnswer] = useState('');
   const [currentStep, setCurrentStep] = useState(1);
   const [totalSteps, setTotalSteps] = useState(5);
+  const [selectedClueIds, setSelectedClueIds] = useState([]);
+  const [solvedClueIds, setSolvedClueIds] = useState([]);
+  const [skippedClueIds, setSkippedClueIds] = useState([]);
   const [score, setScore] = useState(0);
   const [isCompleted, setIsCompleted] = useState(false);
   const [hintText, setHintText] = useState(null);
@@ -51,6 +67,9 @@ export default function Round3Hunt() {
   const [errorMessage, setErrorMessage] = useState(null);
   const [feedbackMsg, setFeedbackMsg] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSkipping, setIsSkipping] = useState(false);
+  const [showSkipModal, setShowSkipModal] = useState(false);
+  const [gradingStatus, setGradingStatus] = useState(null);
 
   const fetchHuntState = React.useCallback(async () => {
     const pid = currentUser?.id;
@@ -63,9 +82,18 @@ export default function Round3Hunt() {
         setScore(checkData.score || 0);
         setCurrentStep(checkData.currentStep || 1);
         setTotalSteps(checkData.totalSteps || 5);
+        setSelectedClueIds(checkData.selectedClueIds || []);
+        setSolvedClueIds(checkData.solvedClueIds || []);
+        setSkippedClueIds(checkData.skippedClueIds || []);
+        if (checkData.gradingStatus) {
+          setGradingStatus(checkData.gradingStatus);
+        }
         if (checkData.clue) {
           setCurrentClueData(checkData.clue);
           setHintText(checkData.clue.hint);
+        } else {
+          setCurrentClueData(null);
+          setHintText(null);
         }
         setIsLoading(false);
         return;
@@ -81,9 +109,21 @@ export default function Round3Hunt() {
       if (startData.success) {
         setCurrentStep(startData.currentStep || 1);
         setTotalSteps(startData.totalSteps || 5);
+        setSelectedClueIds(startData.selectedClueIds || []);
+        setSolvedClueIds(startData.solvedClueIds || []);
+        setSkippedClueIds(startData.skippedClueIds || []);
         setScore(startData.score || 0);
-        setCurrentClueData(startData.clue);
-        setHintText(startData.clue.hint);
+        setIsCompleted(startData.isCompleted || false);
+        if (startData.gradingStatus) {
+          setGradingStatus(startData.gradingStatus);
+        }
+        if (startData.clue) {
+          setCurrentClueData(startData.clue);
+          setHintText(startData.clue.hint);
+        } else {
+          setCurrentClueData(null);
+          setHintText(null);
+        }
       } else {
         setErrorMessage(startData.message);
       }
@@ -128,12 +168,14 @@ export default function Round3Hunt() {
 
       if (data.success && data.correct) {
         setParticipantAnswer('');
-        setFeedbackMsg({ type: 'success', text: 'CORRECT! Unlocking next clue...' });
+        setFeedbackMsg({ type: 'success', text: 'CORRECT! Station solved. Unlocking next clue...' });
         fetchLeaderboard();
 
         if (data.isCompleted) {
           setIsCompleted(true);
           setScore(data.score);
+          if (data.solvedClueIds) setSolvedClueIds(data.solvedClueIds);
+          if (data.skippedClueIds) setSkippedClueIds(data.skippedClueIds);
         } else {
           setTimeout(() => {
             fetchHuntState();
@@ -141,13 +183,65 @@ export default function Round3Hunt() {
           }, 1200);
         }
       } else {
-        setFeedbackMsg({ type: 'error', text: 'INCORRECT ANSWER. Re-examine the station clue and try again.' });
+        setFeedbackMsg({ 
+          type: 'error', 
+          text: data.message || 'INCORRECT ANSWER. Re-examine the station clue and try again, or skip to move to the next station.' 
+        });
       }
     } catch (err) {
       console.error('Submit clue error:', err);
       setFeedbackMsg({ type: 'error', text: 'Network error verifying clue answer.' });
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleSkipStation = async () => {
+    if (!currentClueData || isSkipping) return;
+
+    if (isOffline) {
+      setFeedbackMsg({ type: 'error', text: 'System is currently in offline synchronization phase. Connect Wi-Fi to skip.' });
+      return;
+    }
+
+    setIsSkipping(true);
+    setFeedbackMsg(null);
+    const pid = currentUser?.id;
+    const clueId = currentClueData.clueId;
+
+    try {
+      const res = await fetch(`${API_BASE}/hunt/${clueId}/skip`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ participantId: pid })
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        setParticipantAnswer('');
+        setShowSkipModal(false);
+        setFeedbackMsg({ type: 'warning', text: 'Station skipped (0 pts). Advancing to next clue...' });
+        fetchLeaderboard();
+
+        if (data.isCompleted) {
+          setIsCompleted(true);
+          setScore(data.score);
+          if (data.solvedClueIds) setSolvedClueIds(data.solvedClueIds);
+          if (data.skippedClueIds) setSkippedClueIds(data.skippedClueIds);
+        } else {
+          setTimeout(() => {
+            fetchHuntState();
+            setFeedbackMsg(null);
+          }, 1000);
+        }
+      } else {
+        setFeedbackMsg({ type: 'error', text: data.message || 'Failed to skip station.' });
+      }
+    } catch (err) {
+      console.error('Skip station error:', err);
+      setFeedbackMsg({ type: 'error', text: 'Network error processing station skip.' });
+    } finally {
+      setIsSkipping(false);
     }
   };
 
@@ -229,14 +323,37 @@ export default function Round3Hunt() {
                 <span className="text-[10px] font-mono font-bold text-[#D60303] uppercase tracking-widest">ROUND 3</span>
                 <h2 className="text-lg font-bold text-zinc-900 dark:text-white">TECH HUNT — SEQUENTIAL CLUE CHASE</h2>
               </div>
+              {/* Grading Status Badge */}
+              {gradingStatus && (
+                <span className={`px-2.5 py-1 rounded-full text-[10px] font-mono font-bold border ${
+                  gradingStatus === 'graded'
+                    ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30'
+                    : 'bg-amber-500/10 text-amber-600 border-amber-500/30'
+                }`}>
+                  {gradingStatus === 'graded' ? '✓ Graded Official' : '◎ Non-Graded'}
+                </span>
+              )}
             </div>
 
             <div className="flex items-center gap-2 font-mono text-xs">
+              <span className={`px-2.5 py-1 rounded-full text-[10px] font-mono font-bold border ${warningCount > 0 ? 'bg-amber-500/10 text-amber-600 border-amber-500/30' : 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30'}`}>
+                Anti-Cheat Warnings: {warningCount || 0}/3
+              </span>
               <span className="px-3 py-1 rounded-full bg-[#A30B1A] text-white font-bold shadow-2xs">
                 SCORE: {score} PTS
               </span>
             </div>
           </div>
+
+          {/* Non-Graded Info Banner */}
+          {gradingStatus === 'non_graded' && (
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex items-center gap-3 animate-slide-up">
+              <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+              <p className="text-xs text-amber-700 dark:text-amber-400">
+                <strong>Non-Graded Participation:</strong> You are participating in Round 3 for experience. You can explore, solve, or skip station clues, but your score will not alter the official tournament leaderboard or rankings.
+              </p>
+            </div>
+          )}
 
           {isLoading ? (
             <div className="bg-white/80 dark:bg-[#141417]/80 backdrop-blur-md p-12 rounded-2xl text-center border border-zinc-200/80 dark:border-zinc-800/80">
@@ -250,7 +367,7 @@ export default function Round3Hunt() {
             </div>
           ) : isCompleted ? (
             <div className="space-y-6 max-w-2xl mx-auto my-8 animate-slide-up">
-              {/* GAMIFIED CHAMPION TROPHY BADGE CARD */}
+              {/* GAMIFIED PODIUM COMPLETION CARD */}
               <div className="gradient-border-card p-8 text-center space-y-6 shadow-2xl relative overflow-hidden bg-white/80 dark:bg-[#141417]/80 backdrop-blur-md">
                 <div className="w-24 h-24 bg-gradient-to-tr from-amber-500 via-red-600 to-[#A30B1A] text-white rounded-2xl flex items-center justify-center mx-auto shadow-2xl ring-4 ring-amber-300 animate-bounce">
                   <Trophy className="w-12 h-12 text-yellow-300" />
@@ -259,18 +376,35 @@ export default function Round3Hunt() {
                 <div className="space-y-2">
                   <span className="text-xs font-mono font-bold text-[#D60303] uppercase tracking-widest flex items-center justify-center gap-1.5">
                     <Sparkles className="w-4 h-4 text-amber-500 animate-pulse" />
-                    <span>SYMPOSIUM PODIUM FINISHER</span>
+                    <span>ROUND 3 TECH HUNT COMPLETED</span>
                     <Sparkles className="w-4 h-4 text-amber-500 animate-pulse" />
                   </span>
-                  <h3 className="text-3xl font-black text-zinc-900 dark:text-white">TECHNOVA 2026 CHAMPION</h3>
+                  <h3 className="text-3xl font-black text-zinc-900 dark:text-white">
+                    {solvedClueIds.length === totalSteps ? 'ALL STATIONS SOLVED!' : 'TECH HUNT COURSE FINISHED'}
+                  </h3>
                   <p className="text-xs text-zinc-600 dark:text-[#a1a1aa] font-medium max-w-md mx-auto">
-                    Grand victory! You have solved all station clues in TECHNOVA 2026.
+                    {solvedClueIds.length === totalSteps 
+                      ? 'Flawless performance! You successfully solved all station clues in TECHNOVA 2026.'
+                      : `You have completed your journey through all ${totalSteps} stations of the Tech Hunt.`}
                   </p>
                 </div>
 
-                <div className="p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-2xl inline-block shadow-sm">
-                  <span className="text-xs text-amber-800 dark:text-amber-300 font-bold block uppercase tracking-wider">Final Hunt Score</span>
-                  <span className="text-4xl font-black text-[#D60303]">{score} PTS</span>
+                {/* Score & Progression Summary Badges */}
+                <div className="flex flex-wrap items-center justify-center gap-4">
+                  <div className="p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-2xl shadow-sm min-w-[140px]">
+                    <span className="text-[11px] text-amber-800 dark:text-amber-300 font-bold block uppercase tracking-wider">Final Hunt Score</span>
+                    <span className="text-3xl font-black text-[#D60303]">{score} PTS</span>
+                  </div>
+
+                  <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-2xl shadow-sm min-w-[120px]">
+                    <span className="text-[11px] text-emerald-800 dark:text-emerald-300 font-bold block uppercase tracking-wider">Stations Solved</span>
+                    <span className="text-3xl font-black text-emerald-600 dark:text-emerald-400">{solvedClueIds.length} / {totalSteps}</span>
+                  </div>
+
+                  <div className="p-4 bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-sm min-w-[120px]">
+                    <span className="text-[11px] text-zinc-700 dark:text-zinc-300 font-bold block uppercase tracking-wider">Stations Skipped</span>
+                    <span className="text-3xl font-black text-amber-600 dark:text-amber-400">{skippedClueIds.length} / {totalSteps}</span>
+                  </div>
                 </div>
 
                 {leaderboard && leaderboard.length > 0 && (
@@ -302,27 +436,54 @@ export default function Round3Hunt() {
           ) : currentClueData ? (
             <div className="space-y-6 animate-slide-up">
               {/* Clue Progress Stepper */}
-              <div className="bg-white/80 dark:bg-[#141417]/80 backdrop-blur-md p-4 rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80 shadow-sm flex items-center justify-between card-hover-lift">
-                <span className="text-xs font-mono font-bold text-[#D60303] uppercase tracking-wider">
-                  Sequential Progression: Clue {currentStep} of {totalSteps}
-                </span>
+              <div className="bg-white/80 dark:bg-[#141417]/80 backdrop-blur-md p-4 rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 card-hover-lift">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-mono font-bold text-[#D60303] uppercase tracking-wider">
+                    Station {currentStep} of {totalSteps}
+                  </span>
+                  <span className="text-[11px] font-mono text-zinc-500 dark:text-zinc-400">
+                    ({solvedClueIds.length} solved, {skippedClueIds.length} skipped)
+                  </span>
+                </div>
 
-                <div className="flex items-center gap-1.5">
+                {/* Visual Step Badges */}
+                <div className="flex items-center gap-1.5 flex-wrap">
                   {Array.from({ length: totalSteps }).map((_, idx) => {
                     const stepNum = idx + 1;
-                    const isPassed = stepNum < currentStep;
+                    const stepClueId = selectedClueIds[idx];
+                    const isSolved = stepClueId ? solvedClueIds.includes(stepClueId) : (stepNum < currentStep);
+                    const isSkipped = stepClueId ? skippedClueIds.includes(stepClueId) : false;
                     const isCurrent = stepNum === currentStep;
+
+                    let badgeClasses = 'bg-zinc-100 dark:bg-[#09090b] border border-zinc-200 dark:border-[#27272a] text-zinc-400';
+                    let titleText = `Station ${stepNum}: Locked`;
+
+                    if (isSolved) {
+                      badgeClasses = 'bg-emerald-600 text-white shadow-2xs ring-1 ring-emerald-500';
+                      titleText = `Station ${stepNum}: Solved (+Marks)`;
+                    } else if (isSkipped) {
+                      badgeClasses = 'bg-amber-600/90 text-white shadow-2xs ring-1 ring-amber-500';
+                      titleText = `Station ${stepNum}: Skipped (0 Marks)`;
+                    } else if (isCurrent) {
+                      badgeClasses = 'bg-[#D60303] text-white ring-2 ring-[#D60303] shadow-md transform scale-110';
+                      titleText = `Station ${stepNum}: Active`;
+                    }
 
                     return (
                       <div
                         key={idx}
-                        className={`w-7 h-7 rounded-lg text-xs font-mono font-bold flex items-center justify-center transition-all duration-300 ${
-                          isPassed ? 'bg-[#A30B1A] text-white shadow-2xs' :
-                          isCurrent ? 'bg-[#D60303] text-white ring-2 ring-[#D60303] shadow-md transform scale-110' :
-                          'bg-zinc-100 dark:bg-[#09090b] border border-zinc-200 dark:border-[#27272a] text-zinc-400'
-                        }`}
+                        title={titleText}
+                        className={`w-7 h-7 rounded-lg text-xs font-mono font-bold flex items-center justify-center transition-all duration-300 ${badgeClasses}`}
                       >
-                        {isPassed ? <CheckCircle2 className="w-4 h-4 text-white" /> : isCurrent ? stepNum : <Lock className="w-3.5 h-3.5 text-zinc-400" />}
+                        {isSolved ? (
+                          <CheckCircle2 className="w-4 h-4 text-white" />
+                        ) : isSkipped ? (
+                          <SkipForward className="w-3.5 h-3.5 text-white" />
+                        ) : isCurrent ? (
+                          stepNum
+                        ) : (
+                          <Lock className="w-3.5 h-3.5 text-zinc-400" />
+                        )}
                       </div>
                     );
                   })}
@@ -353,60 +514,90 @@ export default function Round3Hunt() {
                   </p>
                 </div>
 
-                {/* Hint Box */}
+                {/* Hint Section */}
                 {hintText ? (
                   <div className="p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl text-xs text-amber-900 dark:text-amber-200 space-y-1 animate-slide-up">
-                    <span className="font-bold text-[#D60303] block">REVEALED HINT (-2 PTS Penalty):</span>
+                    <span className="font-bold text-[#D60303] block text-[11px] uppercase tracking-wide">REVEALED HINT (-2 PTS Penalty):</span>
                     <p className="font-medium">{hintText}</p>
                   </div>
                 ) : currentClueData.hasHint ? (
                   <button
+                    type="button"
                     onClick={handleRequestHint}
-                    className="px-4 py-2 bg-zinc-100 dark:bg-[#09090b] border border-zinc-300 dark:border-[#27272a] text-zinc-800 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-[#1a1a1e] rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer btn-interactive"
+                    className="px-4 py-2 bg-zinc-100 dark:bg-[#09090b] border border-zinc-300 dark:border-[#27272a] text-zinc-800 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-[#1a1a1e] rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer btn-interactive transition-colors"
                   >
                     <HelpCircle className="w-4 h-4 text-[#D60303]" />
                     <span>Request Station Hint (-2 PTS Penalty)</span>
                   </button>
                 ) : null}
 
-                {/* Answer Form */}
+                {/* Answer Form & Actions */}
                 <form onSubmit={handleSubmitAnswer} className="space-y-4 pt-2">
                   <div className="space-y-2">
                     <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">
                       Enter Station Clue Answer:
                     </label>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                       <input
                         type="text"
                         required
                         value={participantAnswer}
                         onChange={(e) => setParticipantAnswer(e.target.value)}
-                        placeholder="Type answer..."
+                        placeholder="Type clue answer..."
+                        disabled={isSubmitting || isSkipping}
                         className="flex-1 p-3 bg-[#F8F7F4] dark:bg-[#09090b] border border-zinc-300 dark:border-[#27272a] rounded-xl text-xs font-bold text-zinc-900 dark:text-[#f4f4f5] outline-none focus:border-[#D60303] transition-colors"
                       />
                       <button
                         type="submit"
-                        disabled={isSubmitting || isOffline}
-                        className={`px-6 py-3 rounded-xl text-xs font-bold shadow-md transition flex items-center gap-1.5 cursor-pointer btn-interactive ${
+                        disabled={isSubmitting || isSkipping || isOffline}
+                        className={`px-6 py-3 rounded-xl text-xs font-bold shadow-md transition flex items-center justify-center gap-1.5 cursor-pointer btn-interactive ${
                           isOffline 
                             ? 'bg-zinc-400 text-white cursor-not-allowed opacity-60'
                             : 'bg-[#D60303] hover:bg-[#A30B1A] disabled:opacity-50 text-white'
                         }`}
                       >
                         <Send className="w-4 h-4" />
-                        <span>{isOffline ? 'Offline Sync Active' : isSubmitting ? 'Submitting...' : 'Submit'}</span>
+                        <span>{isOffline ? 'Offline Sync Active' : isSubmitting ? 'Submitting...' : 'Submit Answer'}</span>
                       </button>
                     </div>
                   </div>
 
+                  {/* Feedback Banner */}
                   {feedbackMsg && (
                     <div className={`p-3 rounded-xl text-xs font-bold flex items-center gap-2 animate-slide-up ${
-                      feedbackMsg.type === 'success' ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800' : 'bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800'
+                      feedbackMsg.type === 'success' 
+                        ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800' 
+                        : feedbackMsg.type === 'warning'
+                        ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800'
+                        : 'bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800'
                     }`}>
-                      {feedbackMsg.type === 'success' ? <CheckCircle2 className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
+                      {feedbackMsg.type === 'success' ? (
+                        <CheckCircle2 className="w-4 h-4 shrink-0" />
+                      ) : feedbackMsg.type === 'warning' ? (
+                        <SkipForward className="w-4 h-4 shrink-0" />
+                      ) : (
+                        <AlertTriangle className="w-4 h-4 shrink-0" />
+                      )}
                       <span>{feedbackMsg.text}</span>
                     </div>
                   )}
+
+                  {/* Move On / Skip Mechanism Container */}
+                  <div className="pt-2 border-t border-zinc-200 dark:border-[#27272a] flex items-center justify-between flex-wrap gap-2">
+                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400 font-medium">
+                      Don't know the answer? Skip to the next station so you never get permanently stuck.
+                    </p>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowSkipModal(true)}
+                      disabled={isSubmitting || isSkipping || isOffline}
+                      className="px-4 py-2 rounded-xl text-xs font-bold bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-500/30 flex items-center gap-1.5 cursor-pointer transition-colors btn-interactive"
+                    >
+                      <SkipForward className="w-3.5 h-3.5" />
+                      <span>Skip Station & Move On</span>
+                    </button>
+                  </div>
                 </form>
               </div>
             </div>
@@ -414,8 +605,65 @@ export default function Round3Hunt() {
         </main>
       </div>
 
-      {/* Full Screen Enforcement Modal Overlay (RELAXED DURING OFFLINE SYNC STATE) */}
-      {!isFullscreenActive && !isOffline && (
+      {/* Skip Confirmation Modal */}
+      {showSkipModal && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 animate-slide-up select-none">
+          <div className="max-w-md w-full bg-white dark:bg-[#141417] border-2 border-amber-500/50 rounded-2xl p-6 space-y-4 text-zinc-900 dark:text-white shadow-2xl">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0">
+                <SkipForward className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-zinc-900 dark:text-white">
+                  Skip Station {currentClueData?.station}?
+                </h3>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 font-medium font-mono">
+                  Clue {currentStep} of {totalSteps}
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed font-medium">
+              Are you sure you want to skip this station? 
+              <strong className="text-amber-600 dark:text-amber-400 block mt-1">
+                • You will receive 0 marks for this station.
+              </strong>
+              <strong className="text-zinc-700 dark:text-zinc-200 block mt-0.5">
+                • You will immediately advance to the next station without getting blocked.
+              </strong>
+            </p>
+
+            <div className="pt-2 flex justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setShowSkipModal(false)}
+                disabled={isSkipping}
+                className="px-4 py-2.5 rounded-xl text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSkipStation}
+                disabled={isSkipping}
+                className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-md transition flex items-center gap-1.5 cursor-pointer"
+              >
+                {isSkipping ? (
+                  <span>Skipping Station...</span>
+                ) : (
+                  <>
+                    <SkipForward className="w-3.5 h-3.5" />
+                    <span>Yes, Skip & Continue</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Full Screen Enforcement Modal Overlay (RELAXED DURING OFFLINE SYNC STATE / SAFE ZONE) */}
+      {!isFullscreenActive && !isOffline && !isOfflineReconnectionEligible && !isDisqualified && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-6 text-center animate-slide-up select-none">
           <div className="max-w-md w-full bg-white dark:bg-[#141417] border-2 border-[#D60303] rounded-2xl p-6 space-y-4 text-zinc-900 dark:text-white shadow-2xl">
             <div className="w-12 h-12 rounded-full bg-[#D60303]/10 text-[#D60303] flex items-center justify-center mx-auto">

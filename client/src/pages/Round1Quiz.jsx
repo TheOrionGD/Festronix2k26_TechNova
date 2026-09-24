@@ -11,7 +11,10 @@ import {
   ChevronRight,
   Send,
   AlertTriangle,
-  Lock
+  Lock,
+  Wifi,
+  WifiOff,
+  ShieldCheck
 } from 'lucide-react';
 
 export default function Round1Quiz() {
@@ -24,7 +27,11 @@ export default function Round1Quiz() {
     requestFullScreen,
     isOffline,
     leaderboard,
-    isRoundUnlocked
+    isRoundUnlocked,
+    fetchGradingStatus,
+    isDisqualified,
+    isOfflineReconnectionEligible,
+    setIsOfflineReconnectionEligible
   } = useApp();
 
   const [isFullscreenActive, setIsFullscreenActive] = useState(
@@ -61,6 +68,27 @@ export default function Round1Quiz() {
   const [errorMessage, setErrorMessage] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showInitiatedBanner, setShowInitiatedBanner] = useState(true);
+  // gradingStatus: 'graded' | 'non_graded' | null (null = not yet known)
+  const [gradingStatus, setGradingStatus] = useState(null);
+  const [showNonGradedInfo, setShowNonGradedInfo] = useState(false);
+
+  const [showOfflineReconnectionSection, setShowOfflineReconnectionSection] = useState(false);
+
+  const handleOpenOfflineReconnection = React.useCallback(() => {
+    setShowOfflineReconnectionSection(true);
+    setIsOfflineReconnectionEligible(true);
+  }, [setIsOfflineReconnectionEligible]);
+
+  const handleCloseOfflineReconnection = React.useCallback(() => {
+    setShowOfflineReconnectionSection(false);
+    setIsOfflineReconnectionEligible(false);
+  }, [setIsOfflineReconnectionEligible]);
+
+  useEffect(() => {
+    if (isOffline && showOfflineReconnectionSection) {
+      setIsOfflineReconnectionEligible(true);
+    }
+  }, [isOffline, showOfflineReconnectionSection, setIsOfflineReconnectionEligible]);
 
   const { flaggedQuestions, toggleFlagQuestion } = useApp();
 
@@ -76,6 +104,11 @@ export default function Round1Quiz() {
           setAttemptId(checkData.attemptId);
           setQuestions(checkData.questions || []);
           setUserAnswers(checkData.userAnswers || {});
+          // Capture grading status from server response
+          if (checkData.gradingStatus) {
+            setGradingStatus(checkData.gradingStatus);
+            if (checkData.gradingStatus === 'non_graded') setShowNonGradedInfo(true);
+          }
 
           if (checkData.status === 'SUBMITTED') {
             setIsSubmitted(true);
@@ -99,6 +132,11 @@ export default function Round1Quiz() {
           setAttemptId(startData.attemptId);
           setQuestions(startData.questions || []);
           setUserAnswers(startData.userAnswers || {});
+          // Capture grading status assigned by server
+          if (startData.gradingStatus) {
+            setGradingStatus(startData.gradingStatus);
+            if (startData.gradingStatus === 'non_graded') setShowNonGradedInfo(true);
+          }
           if (startData.endsAt) {
             const remSecs = Math.max(0, Math.floor((new Date(startData.endsAt).getTime() - Date.now()) / 1000));
             setTimeLeft(remSecs);
@@ -111,19 +149,23 @@ export default function Round1Quiz() {
         setErrorMessage('Failed to connect to backend quiz engine.');
       } finally {
         setIsLoading(false);
+        // Refresh grading status in global context after quiz init
+        if (pid) fetchGradingStatus(pid);
       }
     };
 
     initQuiz();
-  }, [currentUser]);
+  }, [currentUser, fetchGradingStatus]);
 
   const handleSubmitQuiz = React.useCallback(async () => {
     if (isSubmitting || isSubmitted) return;
     if (isOffline) {
-      alert('System is currently in offline synchronization mode. Please reconnect your Wi-Fi/network to submit.');
+      handleOpenOfflineReconnection();
       return;
     }
     setIsSubmitting(true);
+    setIsOfflineReconnectionEligible(false);
+    setShowOfflineReconnectionSection(false);
 
     try {
       const res = await fetch(`${API_BASE}/quiz/submit`, {
@@ -149,7 +191,7 @@ export default function Round1Quiz() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [isSubmitting, isSubmitted, isOffline, currentUser, attemptId, userAnswers, fetchLeaderboard]);
+  }, [isSubmitting, isSubmitted, isOffline, currentUser, attemptId, userAnswers, fetchLeaderboard, handleOpenOfflineReconnection, setIsOfflineReconnectionEligible]);
 
   // Countdown Timer
   useEffect(() => {
@@ -265,6 +307,16 @@ export default function Round1Quiz() {
                 </span>
                 <h2 className="text-lg font-bold text-zinc-900 dark:text-white">TECH QUIZ</h2>
               </div>
+              {/* Grading Status Badge */}
+              {gradingStatus && (
+                <span className={`px-2.5 py-1 rounded-full text-[10px] font-mono font-bold border ${
+                  gradingStatus === 'graded'
+                    ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30'
+                    : 'bg-amber-500/10 text-amber-600 border-amber-500/30'
+                }`}>
+                  {gradingStatus === 'graded' ? '✓ Graded Official' : '◎ Non-Graded'}
+                </span>
+              )}
             </div>
 
             {/* Countdown Timer, Anti-Cheat Warning Badge, & Attempt Token */}
@@ -289,16 +341,17 @@ export default function Round1Quiz() {
 
               {!isSubmitted && questions.length > 0 && (
                 <button
-                  onClick={handleSubmitQuiz}
-                  disabled={isSubmitting || isOffline}
-                  className={`px-4 py-2 rounded-xl font-bold text-xs shadow-md transition flex items-center gap-1.5 cursor-pointer btn-interactive ${isOffline
-                      ? 'bg-zinc-400 text-white cursor-not-allowed opacity-60'
+                  onClick={isOffline ? handleOpenOfflineReconnection : handleSubmitQuiz}
+                  disabled={isSubmitting}
+                  className={`px-4 py-2 rounded-xl font-bold text-xs shadow-md transition flex items-center gap-1.5 cursor-pointer btn-interactive ${
+                    isOffline
+                      ? 'bg-amber-600 hover:bg-amber-700 text-white'
                       : 'bg-[#D60303] hover:bg-[#A30B1A] text-white'
-                    }`}
+                  }`}
                 >
-                  <Send className="w-4 h-4" />
+                  {isOffline ? <WifiOff className="w-4 h-4" /> : <Send className="w-4 h-4" />}
                   <span>
-                    {isOffline ? 'Offline Sync (Connect to Submit)' : isSubmitting ? 'Submitting...' : 'Submit Quiz'}
+                    {isOffline ? 'Offline Sync & Submit' : isSubmitting ? 'Submitting...' : 'Submit Quiz'}
                   </span>
                 </button>
               )}
@@ -374,7 +427,8 @@ export default function Round1Quiz() {
               </div>
             </div>
           ) : currentQ ? (
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 animate-slide-up">
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6 animate-slide-up">
               {/* Question Box */}
               <div className="md:col-span-3 space-y-6">
                 <div className="bg-white dark:bg-[#141417] p-6 rounded-2xl border border-zinc-200 dark:border-[#27272a] shadow-sm space-y-6 card-hover-lift">
@@ -499,6 +553,94 @@ export default function Round1Quiz() {
                 </div>
               </div>
             </div>
+
+            {/* OFFLINE FIRST SYNCHRONIZATION & NETWORK RECONNECTION PADDING SECTION */}
+            {(isOffline || showOfflineReconnectionSection) && !isSubmitted && (
+              <div className="mt-6 p-6 sm:p-8 rounded-3xl bg-amber-500/10 dark:bg-amber-950/20 border-2 border-amber-500/60 shadow-xl space-y-5 animate-slide-up text-zinc-900 dark:text-white card-border-glow select-none">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-amber-500/30 pb-4">
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/40 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                      {isOffline ? <WifiOff className="w-6 h-6 animate-pulse" /> : <Wifi className="w-6 h-6 text-emerald-500" />}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="px-2.5 py-0.5 rounded-full bg-amber-500 text-white font-mono text-[10px] font-bold uppercase tracking-wider">
+                          OFFLINE FIRST PROTOCOL
+                        </span>
+                        <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-mono text-[10px] font-bold border border-emerald-500/30">
+                          SAFE ZONE ACTIVE
+                        </span>
+                      </div>
+                      <h3 className="text-lg font-black text-zinc-900 dark:text-white tracking-tight uppercase mt-1">
+                        Network Reconnection & Submission Station
+                      </h3>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 font-mono text-xs">
+                    <span className="text-zinc-500 dark:text-zinc-400">Telemetry Status:</span>
+                    <span className={`font-bold px-3 py-1 rounded-xl border ${isOffline ? 'bg-red-500/10 text-red-500 border-red-500/30' : 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30'}`}>
+                      {isOffline ? '🔴 OFFLINE' : '🟢 RECONNECTED'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Core instruction required by prompt */}
+                <div className="p-5 rounded-2xl bg-white/90 dark:bg-[#141417]/90 border border-amber-500/40 space-y-2">
+                  <div className="flex items-start gap-3">
+                    <ShieldCheck className="w-6 h-6 text-emerald-500 shrink-0 mt-0.5" />
+                    <div className="space-y-1.5 text-xs">
+                      <p className="font-bold text-amber-700 dark:text-amber-400 text-sm">
+                        You are now eligible to exit Full Screen and reconnect to the network.
+                      </p>
+                      <p className="text-zinc-600 dark:text-zinc-300 leading-relaxed font-medium">
+                        In this offline submission state, tab switching and exiting full screen are <strong>permitted</strong> without incurring any anti-cheat warnings or account freeze penalties. All your selected answers ({answeredCount}/{questions.length}) are saved securely in your browser cache.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Action controls */}
+                <div className="flex flex-col sm:flex-row items-center gap-3 pt-2 font-mono text-xs font-bold">
+                  <button
+                    onClick={() => {
+                      if (document.fullscreenElement || document.webkitFullscreenElement) {
+                        if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
+                      }
+                    }}
+                    className="w-full sm:w-auto px-5 py-3 rounded-xl bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 transition cursor-pointer flex items-center justify-center gap-2 shadow-xs"
+                  >
+                    <span>Exit Full Screen to Connect Network</span>
+                  </button>
+
+                  {!isOffline ? (
+                    <button
+                      onClick={handleSubmitQuiz}
+                      disabled={isSubmitting}
+                      className="w-full sm:w-auto px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg transition cursor-pointer flex items-center justify-center gap-2"
+                    >
+                      <Send className="w-4 h-4" />
+                      <span>{isSubmitting ? 'Submitting Responses...' : 'Submit Official Quiz Attempt Now'}</span>
+                    </button>
+                  ) : (
+                    <div className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-2 font-medium">
+                      <WifiOff className="w-4 h-4 shrink-0 animate-pulse" />
+                      <span>Waiting for network reconnection... (Connect Wi-Fi / Hotspot)</span>
+                    </div>
+                  )}
+
+                  {showOfflineReconnectionSection && (
+                    <button
+                      onClick={handleCloseOfflineReconnection}
+                      className="w-full sm:w-auto sm:ml-auto px-4 py-3 rounded-xl border border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition cursor-pointer"
+                    >
+                      Hide Section & Continue Reviewing
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+            </>
           ) : null}
         </main>
       </div>
@@ -533,8 +675,34 @@ export default function Round1Quiz() {
         </div>
       )}
 
+      {/* NON-GRADED PARTICIPANT NOTICE */}
+      {showNonGradedInfo && !showInitiatedBanner && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-6 animate-slide-up">
+          <div className="max-w-md w-full bg-white dark:bg-[#141417] border-2 border-amber-500/60 rounded-2xl p-6 space-y-4 text-zinc-900 dark:text-white shadow-2xl">
+            <div className="w-12 h-12 rounded-full bg-amber-50 dark:bg-amber-900/20 text-amber-600 flex items-center justify-center mx-auto">
+              <AlertTriangle className="w-7 h-7" />
+            </div>
+            <div className="text-center space-y-2">
+              <span className="text-xs font-mono font-bold text-amber-600 uppercase tracking-widest block">◎ NON-GRADED PARTICIPATION</span>
+              <h3 className="text-lg font-black text-zinc-900 dark:text-white">Your Round 1 is Non-Graded</h3>
+              <p className="text-xs text-zinc-600 dark:text-[#a1a1aa] leading-relaxed font-medium">
+                You are participating in Round 1, but your score will <strong>not</strong> be counted in the official leaderboard or qualification standings.
+                This can happen when a new round grading cohort is configured by the admin.
+                You can still complete the quiz for practice.
+              </p>
+            </div>
+            <button
+              onClick={() => setShowNonGradedInfo(false)}
+              className="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs uppercase tracking-wider shadow transition cursor-pointer btn-interactive font-mono"
+            >
+              I UNDERSTAND — CONTINUE
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Full Screen Enforcement Modal Overlay */}
-      {!isFullscreenActive && !isOffline && !showInitiatedBanner && (
+      {!isFullscreenActive && !isOffline && !showInitiatedBanner && !isOfflineReconnectionEligible && !showOfflineReconnectionSection && !isDisqualified && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-6 text-center animate-slide-up select-none">
           <div className="max-w-md w-full bg-white dark:bg-[#141417] border-2 border-[#D60303] rounded-2xl p-6 space-y-4 text-zinc-900 dark:text-white shadow-2xl">
             <div className="w-12 h-12 rounded-full bg-red-50 dark:bg-[#991B1B]/20 text-[#D60303] flex items-center justify-center mx-auto">

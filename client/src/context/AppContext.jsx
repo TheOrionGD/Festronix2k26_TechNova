@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { io } from 'socket.io-client';
 import { BACKEND_URL, API_BASE } from '../config';
 import { AppContext } from './AppContextObject';
@@ -16,7 +16,7 @@ export const AppProvider = ({ children }) => {
     }
   });
 
-  const [currentScreen, setCurrentScreen] = useState(() => {
+  const [currentScreen, setCurrentScreenState] = useState(() => {
     try {
       const saved = localStorage.getItem('technova_user');
       if (saved) {
@@ -28,6 +28,8 @@ export const AppProvider = ({ children }) => {
     } catch {}
     return 'splash';
   });
+
+  // setCurrentScreen is defined later, after isOfflineReconnectionEligible is declared
   const [eventState, setEventState] = useState({
     status: 'REGISTRATION',
     round1MaxQuestions: 20,
@@ -53,6 +55,14 @@ export const AppProvider = ({ children }) => {
     answers: {},
     score: 0
   });
+  // Per-participant grading status per round (fetched from /api/quiz/grading-status)
+  // Shape: { round1: { gradingStatus, hasAttempt }, round2: { gradingStatus, hasAttempt }, round3: ... }
+  const [gradingStatusMap, setGradingStatusMap] = useState(null);
+  const [roundGradingConfig, setRoundGradingConfig] = useState({
+    1: { gradingPercentage: 100 },
+    2: { gradingPercentage: 80 },
+    3: { gradingPercentage: 50 }
+  });
 
   // Theme state: 'light' | 'dark'
   const [theme, setTheme] = useState(() => {
@@ -72,9 +82,69 @@ export const AppProvider = ({ children }) => {
     setTheme(prev => (prev === 'light' ? 'dark' : 'light'));
   };
 
-  // Anti-Cheat Logger Signals
+  // Anti-Cheat Logger Signals & Disqualification State
   const [antiCheatFlags, setAntiCheatFlags] = useState([]);
-  const [warningCount, setWarningCount] = useState(0);
+
+  // Disqualification state (Frozen participant due to 3 anti-cheat violations)
+  const [isDisqualified, setIsDisqualified] = useState(() => {
+    try {
+      const savedUser = localStorage.getItem('technova_user');
+      const u = savedUser ? JSON.parse(savedUser) : null;
+      if (u?.id) {
+        return localStorage.getItem(`technova_disqualified_${u.id}`) === 'true' || u.accountStatus === 'DISQUALIFIED';
+      }
+    } catch {}
+    return false;
+  });
+
+  const [disqualificationReason, setDisqualificationReason] = useState(() => {
+    try {
+      const savedUser = localStorage.getItem('technova_user');
+      const u = savedUser ? JSON.parse(savedUser) : null;
+      if (u?.id) {
+        return localStorage.getItem(`technova_disqualified_reason_${u.id}`) || '';
+      }
+    } catch {}
+    return '';
+  });
+
+  // Safe zone where tab switching and exiting full screen are allowed (e.g. offline network reconnection before submission)
+  const [isOfflineReconnectionEligible, setIsOfflineReconnectionEligible] = useState(false);
+
+  const [warningCount, setWarningCount] = useState(() => {
+    try {
+      const savedUser = localStorage.getItem('technova_user');
+      const u = savedUser ? JSON.parse(savedUser) : null;
+      if (u?.id) {
+        const c = localStorage.getItem(`technova_warnings_${u.id}`);
+        return c ? parseInt(c, 10) : 0;
+      }
+    } catch {}
+    return 0;
+  });
+
+  const lastViolationTimeRef = useRef(0);
+  const isOfflineReconnectionRef = useRef(isOfflineReconnectionEligible);
+  const isDisqualifiedRef = useRef(isDisqualified);
+
+  useEffect(() => {
+    isOfflineReconnectionRef.current = isOfflineReconnectionEligible;
+  }, [isOfflineReconnectionEligible]);
+
+  useEffect(() => {
+    isDisqualifiedRef.current = isDisqualified;
+  }, [isDisqualified]);
+
+  // setCurrentScreen wrapper – resets safe zone when navigating away from round screens
+  const setCurrentScreen = useCallback((screenOrUpdater) => {
+    setCurrentScreenState(prev => {
+      const next = typeof screenOrUpdater === 'function' ? screenOrUpdater(prev) : screenOrUpdater;
+      if (!['round1', 'round2', 'round3'].includes(next)) {
+        setIsOfflineReconnectionEligible(false);
+      }
+      return next;
+    });
+  }, [setIsOfflineReconnectionEligible]);
 
   // Fetch initial event state & live collections
   const fetchEventState = async () => {
@@ -99,6 +169,33 @@ export const AppProvider = ({ children }) => {
     } catch (err) {
       console.error('Fetch leaderboard error:', err);
       setLeaderboard([]);
+    }
+  };
+
+  // Fetch grading status for the current participant
+  const fetchGradingStatus = useCallback(async (participantId) => {
+    if (!participantId) return;
+    try {
+      const res = await fetch(`${API_BASE}/quiz/grading-status?participantId=${participantId}`);
+      const data = await res.json();
+      if (data.success) {
+        setGradingStatusMap(data.gradingResults);
+      }
+    } catch (err) {
+      console.warn('Fetch grading status error:', err);
+    }
+  }, []);
+
+  // Fetch round grading configuration
+  const fetchRoundGradingConfig = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/admin/round-grading-config`);
+      const data = await res.json();
+      if (data.success && data.roundGradingConfig) {
+        setRoundGradingConfig(data.roundGradingConfig);
+      }
+    } catch (err) {
+      console.warn('Fetch round grading config error:', err);
     }
   };
 
@@ -201,6 +298,45 @@ export const AppProvider = ({ children }) => {
   const [pendingVerificationProblemId, setPendingVerificationProblemId] = useState(null);
   const [isCoordinatorModalOpen, setIsCoordinatorModalOpen] = useState(false);
 
+  // Notification Drawer & Notifications List State
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [notifications, setNotifications] = useState([
+    {
+      id: 'notif-1',
+      title: 'TECHNOVA 2026 Welcome',
+      message: 'Welcome to the Department of CSE Technical Symposium. Please review event rules.',
+      time: 'Just now',
+      read: false,
+      type: 'INFO'
+    },
+    {
+      id: 'notif-2',
+      title: 'Anti-Cheat Telemetry Active',
+      message: 'Tab switches and fullscreen exits are monitored in real time.',
+      time: '5 mins ago',
+      read: false,
+      type: 'SECURITY'
+    }
+  ]);
+
+  const toggleNotifications = () => {
+    setIsNotificationsOpen(prev => !prev);
+  };
+
+  const markAllNotificationsRead = () => {
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+  };
+
+  // Fetch grading status when participant logs in or changes
+  useEffect(() => {
+    if (currentUser?.role === 'PARTICIPANT' && currentUser?.id) {
+      const pid = currentUser.id;
+      Promise.resolve().then(() => {
+        fetchGradingStatus(pid);
+      });
+    }
+  }, [currentUser?.role, currentUser?.id, fetchGradingStatus]);
+
   useEffect(() => {
     Promise.resolve().then(() => {
       fetchEventState();
@@ -209,6 +345,7 @@ export const AppProvider = ({ children }) => {
       fetchQuestions();
       fetchDebugProblems();
       fetchTechClues();
+      fetchRoundGradingConfig();
     });
 
     // Real-Time WebSocket Connection
@@ -247,6 +384,20 @@ export const AppProvider = ({ children }) => {
         }
       });
 
+      socket.on('participant:disqualified', (data) => {
+        if (data && data.participantId === currentUser?.id) {
+          setIsDisqualified(true);
+          isDisqualifiedRef.current = true;
+          setDisqualificationReason(data.reason || 'Disqualified due to malpractice');
+          if (currentUser?.id) {
+            localStorage.setItem(`technova_disqualified_${currentUser.id}`, 'true');
+            if (data.reason) {
+              localStorage.setItem(`technova_disqualified_reason_${currentUser.id}`, data.reason);
+            }
+          }
+        }
+      });
+
       const handleStateUpdate = (state) => {
         if (state) {
           setEventState(prev => ({ ...prev, ...state }));
@@ -263,34 +414,109 @@ export const AppProvider = ({ children }) => {
     return () => {
       if (socket) socket.disconnect();
     };
-  }, []);
+  }, [currentUser?.id]);
 
-  // Tab switch & Blur monitoring logger
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.hidden && currentUser?.role === 'PARTICIPANT' && (currentScreen === 'round1' || currentScreen === 'round2')) {
-        const flag = {
-          id: Date.now(),
-          participantId: currentUser?.id,
-          type: 'TAB_BLUR',
-          timestamp: new Date().toLocaleTimeString(),
-          message: 'Browser tab switched / window unfocused'
-        };
-        setAntiCheatFlags(prev => [flag, ...prev]);
-        setWarningCount(prev => prev + 1);
+  // Record Anti-Cheat Violation with 2.5s debounce, safe zone exemption, and 3-strike freeze/disqualification
+  const recordAntiCheatViolation = useCallback((type, message) => {
+    if (isDisqualifiedRef.current) return;
+    if (currentUser?.role !== 'PARTICIPANT') return;
+    if (!['round1', 'round2', 'round3'].includes(currentScreen)) return;
 
-        // Send signal to backend
-        fetch(`${API_BASE}/anticheat/log`, {
+    // SAFE ZONE: User is in offline reconnection / submission section
+    if (isOfflineReconnectionRef.current) {
+      console.log('Anti-cheat violation exempted: candidate in network reconnection safe zone');
+      return;
+    }
+
+    // Debounce to prevent multiple events (blur, visibilitychange, fullscreenchange) firing simultaneously
+    const now = Date.now();
+    if (now - lastViolationTimeRef.current < 2500) {
+      return;
+    }
+    lastViolationTimeRef.current = now;
+
+    setWarningCount(prev => {
+      const next = prev + 1;
+      const pid = currentUser?.id;
+      if (pid) {
+        localStorage.setItem(`technova_warnings_${pid}`, String(next));
+      }
+
+      const flag = {
+        id: Date.now(),
+        participantId: pid,
+        type: type || 'MALPRACTICE_WARNING',
+        timestamp: new Date().toLocaleTimeString(),
+        message: message || `Anti-cheat violation #${next} in ${currentScreen}`
+      };
+      setAntiCheatFlags(f => [flag, ...f]);
+
+      fetch(`${API_BASE}/anticheat/log`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(flag)
+      }).catch(() => {});
+
+      if (next >= 3) {
+        const reason = `Exceeded maximum allowable anti-cheat violations (${next}/3) due to tab switching or full screen exit in ${currentScreen.toUpperCase()}. Automatically frozen and disqualified for malpractice.`;
+        setIsDisqualified(true);
+        isDisqualifiedRef.current = true;
+        setDisqualificationReason(reason);
+        if (pid) {
+          localStorage.setItem(`technova_disqualified_${pid}`, 'true');
+          localStorage.setItem(`technova_disqualified_reason_${pid}`, reason);
+        }
+
+        fetch(`${API_BASE}/anticheat/disqualify`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(flag)
+          body: JSON.stringify({
+            participantId: pid,
+            round: currentScreen,
+            reason
+          })
         }).catch(() => {});
+      }
+
+      return next;
+    });
+  }, [currentUser?.role, currentUser?.id, currentScreen]);
+
+  // Tab switch, Window blur & Full screen monitoring for active rounds (round1, round2, round3)
+  useEffect(() => {
+    if (currentUser?.role !== 'PARTICIPANT' || !['round1', 'round2', 'round3'].includes(currentScreen)) {
+      return;
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        recordAntiCheatViolation('TAB_SWITCH', 'Browser tab switched or window minimized');
+      }
+    };
+
+    const handleWindowBlur = () => {
+      recordAntiCheatViolation('WINDOW_BLUR', 'Window lost focus or application switched');
+    };
+
+    const handleFullscreenChange = () => {
+      const isFull = !!(document.fullscreenElement || document.webkitFullscreenElement);
+      if (!isFull) {
+        recordAntiCheatViolation('FULLSCREEN_EXIT', 'Full screen mode exited during active round');
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [currentUser, currentScreen]);
+    window.addEventListener('blur', handleWindowBlur);
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('blur', handleWindowBlur);
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+    };
+  }, [currentUser?.role, currentScreen, recordAntiCheatViolation]);
 
   // Authentication via Backend API (User ID + Password -> Token + Role)
   const loginUser = async (credentials) => {
@@ -309,6 +535,15 @@ export const AppProvider = ({ children }) => {
         }
         localStorage.setItem('technova_user', JSON.stringify(data.user));
         setCurrentUser(data.user);
+
+        const pid = data.user.id;
+        const isDisq = localStorage.getItem(`technova_disqualified_${pid}`) === 'true' || data.user.accountStatus === 'DISQUALIFIED';
+        const reason = localStorage.getItem(`technova_disqualified_reason_${pid}`) || '';
+        const wCount = parseInt(localStorage.getItem(`technova_warnings_${pid}`) || '0', 10);
+        setIsDisqualified(isDisq);
+        isDisqualifiedRef.current = isDisq;
+        setDisqualificationReason(reason);
+        setWarningCount(wCount);
 
         // Auto-redirect to dashboard matching trusted backend user role
         if (data.user.role === 'ADMIN') {
@@ -331,6 +566,11 @@ export const AppProvider = ({ children }) => {
   const logoutUser = () => {
     localStorage.removeItem('technova_token');
     localStorage.removeItem('technova_user');
+    setIsDisqualified(false);
+    isDisqualifiedRef.current = false;
+    setDisqualificationReason('');
+    setWarningCount(0);
+    setIsOfflineReconnectionEligible(false);
     setCurrentUser(null);
     setCurrentScreen('landing');
   };
@@ -387,7 +627,7 @@ export const AppProvider = ({ children }) => {
   };
 
   // Verify Debug Submission (Coordinator)
-  const verifyDebugSubmission = async (problemId, coordinatorId, pin, marksAwarded = 10, participantId) => {
+  const verifyDebugSubmission = async (problemId, coordinatorId, pin, marksAwarded = 10, participantId, rubricBreakdown = {}) => {
     try {
       const res = await fetch(`${API_BASE}/coordinator/verify`, {
         method: 'POST',
@@ -397,7 +637,8 @@ export const AppProvider = ({ children }) => {
           coordinatorId,
           pin,
           marks: marksAwarded,
-          participantId: participantId || currentUser?.id
+          participantId: participantId || currentUser?.id,
+          rubricBreakdown
         })
       });
       const data = await res.json();
@@ -498,35 +739,6 @@ export const AppProvider = ({ children }) => {
     }
   };
 
-  // Notification Drawer & Notifications List State
-  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const [notifications, setNotifications] = useState([
-    {
-      id: 'notif-1',
-      title: 'TECHNOVA 2026 Welcome',
-      message: 'Welcome to the Department of CSE Technical Symposium. Please review event rules.',
-      time: 'Just now',
-      read: false,
-      type: 'INFO'
-    },
-    {
-      id: 'notif-2',
-      title: 'Anti-Cheat Telemetry Active',
-      message: 'Tab switches and fullscreen exits are monitored in real time.',
-      time: '5 mins ago',
-      read: false,
-      type: 'SECURITY'
-    }
-  ]);
-
-  const toggleNotifications = () => {
-    setIsNotificationsOpen(prev => !prev);
-  };
-
-  const markAllNotificationsRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-  };
-
   // Quiz Question Flagging State
   const [flaggedQuestions, setFlaggedQuestions] = useState({});
 
@@ -537,21 +749,46 @@ export const AppProvider = ({ children }) => {
     }));
   };
 
-  const isParticipantQualified = (roundNumber) => {
-    if (currentUser?.role === 'ADMIN' || currentUser?.role === 'COORDINATOR') return true;
-    if (roundNumber === 1) return true;
+  // ───────────────────────────────────────────────────────────────────────────────
+  // PARTICIPATION vs GRADING
+  // ───────────────────────────────────────────────────────────────────────────────
+  // IMPORTANT: Every registered participant can PARTICIPATE in EVERY round.
+  // The distinction is between PARTICIPATION (access) and GRADING (official score).
+  // Non-graded participants can attend, answer, and submit — but their
+  // results are excluded from the official leaderboard and qualification.
+  //
+  // isParticipantQualified() now ALWAYS returns true for participation purposes.
+  // To check grading status, use isParticipantGraded().
+  // ───────────────────────────────────────────────────────────────────────────────
+  const isParticipantQualified = (_roundNumber) => {
+    // All participants can access all rounds — this function is kept for backward compatibility
+    // but now always returns true. Grading eligibility is separate (see isParticipantGraded).
+    return true;
+  };
+
+  // Returns grading status for current participant for a given round
+  // 'graded' = attempt counts officially | 'non_graded' = stored but excluded from leaderboard
+  const isParticipantGraded = (roundNumber) => {
+    if (!gradingStatusMap) return null; // not yet fetched
+    const key = `round${roundNumber}`;
+    return gradingStatusMap[key]?.gradingStatus || null;
+  };
+
+  // Returns whether the current participant's leaderboard entry shows graded status
+  // (server-authoritative from the leaderboard data)
+  const isGradedInLeaderboard = (roundNumber) => {
+    if (currentUser?.role !== 'PARTICIPANT') return true;
     const entry = leaderboard.find(l => l.id === currentUser?.id);
     if (!entry) return true; // fallback while loading
-    if (roundNumber === 2) {
-      return entry.qualifiedR2 !== false && entry.qualifiedForRound2 !== false;
-    }
-    if (roundNumber === 3) {
-      return entry.qualifiedR3 === true || entry.qualifiedForRound3 === true;
-    }
+    if (roundNumber === 2) return entry.isGradedR2 !== false && entry.qualifiedR2 !== false;
+    if (roundNumber === 3) return entry.isGradedR3 === true || entry.qualifiedR3 === true;
     return true;
   };
 
   // Round Access Validation Helper
+  // Returns true if the round is open AND the participant is allowed to enter.
+  // NOTE: ALL participants can enter ALL rounds once the round is running.
+  // Grading status (graded vs non_graded) is determined server-side at attempt creation.
   const isRoundUnlocked = (roundNumber) => {
     if (currentUser?.role === 'ADMIN' || currentUser?.role === 'COORDINATOR') return true;
     const status = eventState?.status || 'REGISTRATION';
@@ -564,19 +801,17 @@ export const AppProvider = ({ children }) => {
       ].includes(status);
     }
     if (roundNumber === 2) {
-      const isPhaseOpen = [
+      // ALL participants can enter Round 2 once it is running
+      return [
         'ROUND_2_RUNNING', 'ROUND_2_ENDED',
         'ROUND_3_READY', 'ROUND_3_RUNNING', 'COMPLETED'
       ].includes(status);
-      if (!isPhaseOpen) return false;
-      return isParticipantQualified(2);
     }
     if (roundNumber === 3) {
-      const isPhaseOpen = [
+      // ALL participants can enter Round 3 once it is running
+      return [
         'ROUND_3_RUNNING', 'COMPLETED'
       ].includes(status);
-      if (!isPhaseOpen) return false;
-      return isParticipantQualified(3);
     }
     return false;
   };
@@ -609,10 +844,6 @@ export const AppProvider = ({ children }) => {
     if (roundScreen === 'round3') roundNum = 3;
 
     if (!isRoundUnlocked(roundNum)) {
-      if (!isParticipantQualified(roundNum)) {
-        alert(`❌ You did not qualify for Round ${roundNum} based on previous round rankings.\nCheck the Live Leaderboard for your current standing.`);
-        return;
-      }
       alert(`⚠️ Round ${roundNum} is currently locked!\nIt will be activated once the Coordinator initiates Round ${roundNum}.`);
       return;
     }
@@ -630,6 +861,8 @@ export const AppProvider = ({ children }) => {
       isRoundActive,
       isRoundCompleted,
       isParticipantQualified,
+      isParticipantGraded,
+      isGradedInLeaderboard,
       requestFullScreen,
       currentUser,
       loginUser,
@@ -650,6 +883,13 @@ export const AppProvider = ({ children }) => {
       requestHuntHint,
       antiCheatFlags,
       warningCount,
+      isDisqualified,
+      setIsDisqualified,
+      disqualificationReason,
+      setDisqualificationReason,
+      isOfflineReconnectionEligible,
+      setIsOfflineReconnectionEligible,
+      recordAntiCheatViolation,
       isCoordinatorModalOpen,
       setIsCoordinatorModalOpen,
       pendingVerificationProblemId,
@@ -660,6 +900,10 @@ export const AppProvider = ({ children }) => {
       fetchQuestions,
       fetchDebugProblems,
       fetchTechClues,
+      fetchGradingStatus,
+      fetchRoundGradingConfig,
+      gradingStatusMap,
+      roundGradingConfig,
       isOffline,
       showOfflineToast,
       setShowOfflineToast,

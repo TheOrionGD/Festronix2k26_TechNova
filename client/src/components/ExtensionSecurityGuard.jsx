@@ -5,14 +5,8 @@ import {
   RefreshCw, 
   AlertTriangle, 
   Info, 
-  ExternalLink, 
-  Lock, 
-  CheckCircle2, 
-  Sliders,
-  Sparkles,
-  Layers,
-  ChevronDown,
-  ChevronUp
+  ChevronDown, 
+  ChevronUp 
 } from 'lucide-react';
 
 export default function ExtensionSecurityGuard({ 
@@ -20,8 +14,8 @@ export default function ExtensionSecurityGuard({
   detectedExtensions, 
   isScanning, 
   rescan,
-  lastScanTime,
-  compact = false 
+  _lastScanTime,
+  _compact = false 
 }) {
   const [activeTab, setActiveTab] = useState('chrome');
   const [showDetails, setShowDetails] = useState(true);

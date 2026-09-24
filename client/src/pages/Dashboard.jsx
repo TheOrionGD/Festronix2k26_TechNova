@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { useApp } from '../context/useApp';
 import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
-import CoordinatorModal from '../components/CoordinatorModal';
 import { 
   Copy, 
   Building2, 
@@ -92,7 +91,6 @@ export default function Dashboard() {
 
   const r1Done = isRoundCompleted ? isRoundCompleted(1) : (r1Score > 0 || eventState?.status === 'ROUND_1_ENDED');
   const r2Done = isRoundCompleted ? isRoundCompleted(2) : (r2Score > 0 || eventState?.status === 'ROUND_2_ENDED');
-  const r3Done = isRoundCompleted ? isRoundCompleted(3) : (eventState?.status === 'COMPLETED');
 
   // Render Sub-Views based on Navigation Selection
   const renderWorkspaceContent = () => {
