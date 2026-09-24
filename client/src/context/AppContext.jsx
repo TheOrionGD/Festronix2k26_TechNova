@@ -247,9 +247,15 @@ export const AppProvider = ({ children }) => {
         }
       });
 
-      socket.on('event:state_changed', (state) => {
-        if (state) setEventState(state);
-      });
+      const handleStateUpdate = (state) => {
+        if (state) {
+          setEventState(prev => ({ ...prev, ...state }));
+        }
+      };
+
+      socket.on('eventState:updated', handleStateUpdate);
+      socket.on('event:state_changed', handleStateUpdate);
+      socket.on('eventState:changed', handleStateUpdate);
     } catch (e) {
       console.error('Socket.io connection error:', e);
     }
@@ -531,20 +537,68 @@ export const AppProvider = ({ children }) => {
     }));
   };
 
+  const isParticipantQualified = (roundNumber) => {
+    if (currentUser?.role === 'ADMIN' || currentUser?.role === 'COORDINATOR') return true;
+    if (roundNumber === 1) return true;
+    const entry = leaderboard.find(l => l.id === currentUser?.id);
+    if (!entry) return true; // fallback while loading
+    if (roundNumber === 2) {
+      return entry.qualifiedR2 !== false && entry.qualifiedForRound2 !== false;
+    }
+    if (roundNumber === 3) {
+      return entry.qualifiedR3 === true || entry.qualifiedForRound3 === true;
+    }
+    return true;
+  };
+
   // Round Access Validation Helper
   const isRoundUnlocked = (roundNumber) => {
     if (currentUser?.role === 'ADMIN' || currentUser?.role === 'COORDINATOR') return true;
-    const status = eventState?.status;
-    const activeR = eventState?.activeRound || 1;
+    const status = eventState?.status || 'REGISTRATION';
 
     if (roundNumber === 1) {
-      return status === 'ROUND_1_RUNNING' || status === 'ROUND_1_READY' || status === 'ROUND_1_ENDED' || activeR >= 1;
+      return [
+        'ROUND_1_RUNNING', 'ROUND_1_ENDED',
+        'ROUND_2_READY', 'ROUND_2_RUNNING', 'ROUND_2_ENDED',
+        'ROUND_3_READY', 'ROUND_3_RUNNING', 'COMPLETED'
+      ].includes(status);
     }
     if (roundNumber === 2) {
-      return status === 'ROUND_2_RUNNING' || status === 'ROUND_2_READY' || status === 'ROUND_2_ENDED' || activeR >= 2;
+      const isPhaseOpen = [
+        'ROUND_2_RUNNING', 'ROUND_2_ENDED',
+        'ROUND_3_READY', 'ROUND_3_RUNNING', 'COMPLETED'
+      ].includes(status);
+      if (!isPhaseOpen) return false;
+      return isParticipantQualified(2);
     }
     if (roundNumber === 3) {
-      return status === 'ROUND_3_RUNNING' || status === 'ROUND_3_READY' || status === 'COMPLETED' || activeR >= 3;
+      const isPhaseOpen = [
+        'ROUND_3_RUNNING', 'COMPLETED'
+      ].includes(status);
+      if (!isPhaseOpen) return false;
+      return isParticipantQualified(3);
+    }
+    return false;
+  };
+
+  const isRoundActive = (roundNumber) => {
+    const status = eventState?.status;
+    if (roundNumber === 1) return status === 'ROUND_1_RUNNING';
+    if (roundNumber === 2) return status === 'ROUND_2_RUNNING';
+    if (roundNumber === 3) return status === 'ROUND_3_RUNNING';
+    return false;
+  };
+
+  const isRoundCompleted = (roundNumber) => {
+    const status = eventState?.status || 'REGISTRATION';
+    if (roundNumber === 1) {
+      return ['ROUND_1_ENDED', 'ROUND_2_READY', 'ROUND_2_RUNNING', 'ROUND_2_ENDED', 'ROUND_3_READY', 'ROUND_3_RUNNING', 'COMPLETED'].includes(status);
+    }
+    if (roundNumber === 2) {
+      return ['ROUND_2_ENDED', 'ROUND_3_READY', 'ROUND_3_RUNNING', 'COMPLETED'].includes(status);
+    }
+    if (roundNumber === 3) {
+      return status === 'COMPLETED';
     }
     return false;
   };
@@ -555,7 +609,11 @@ export const AppProvider = ({ children }) => {
     if (roundScreen === 'round3') roundNum = 3;
 
     if (!isRoundUnlocked(roundNum)) {
-      alert(`⚠️ Round ${roundNum} is currently locked!\nAwaiting Coordinator activation.`);
+      if (!isParticipantQualified(roundNum)) {
+        alert(`❌ You did not qualify for Round ${roundNum} based on previous round rankings.\nCheck the Live Leaderboard for your current standing.`);
+        return;
+      }
+      alert(`⚠️ Round ${roundNum} is currently locked!\nIt will be activated once the Coordinator initiates Round ${roundNum}.`);
       return;
     }
 
@@ -569,6 +627,9 @@ export const AppProvider = ({ children }) => {
       setCurrentScreen,
       navigateToRound,
       isRoundUnlocked,
+      isRoundActive,
+      isRoundCompleted,
+      isParticipantQualified,
       requestFullScreen,
       currentUser,
       loginUser,

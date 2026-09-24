@@ -10,7 +10,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Send,
-  AlertTriangle
+  AlertTriangle,
+  Lock
 } from 'lucide-react';
 
 export default function Round1Quiz() {
@@ -22,7 +23,8 @@ export default function Round1Quiz() {
     eventState,
     requestFullScreen,
     isOffline,
-    leaderboard
+    leaderboard,
+    isRoundUnlocked
   } = useApp();
 
   const [isFullscreenActive, setIsFullscreenActive] = useState(
@@ -202,6 +204,46 @@ export default function Round1Quiz() {
   };
 
   const answeredCount = Object.keys(userAnswers).length;
+
+  if (!isRoundUnlocked(1)) {
+    return (
+      <div className="min-h-screen bg-transparent text-[#595959] dark:text-[#f4f4f5] flex flex-col transition-colors duration-200">
+        <Header />
+        <div className="flex flex-1">
+          <Sidebar />
+          <main className="flex-1 p-6 flex items-center justify-center">
+            <div className="bg-white/80 dark:bg-[#141417]/90 backdrop-blur-md p-8 rounded-3xl border border-red-500/50 shadow-2xl max-w-lg w-full text-center space-y-5 animate-slide-up card-border-glow">
+              <div className="w-16 h-16 rounded-3xl bg-red-500/10 border-2 border-red-500/40 text-[#D60303] flex items-center justify-center shadow-lg shadow-red-500/10 mx-auto animate-pulse">
+                <Lock className="w-8 h-8" />
+              </div>
+              <div className="space-y-1.5">
+                <span className="text-xs font-mono font-bold text-red-500 uppercase tracking-widest block">
+                  ROUND 1 IS CURRENTLY LOCKED
+                </span>
+                <h2 className="text-xl font-black text-zinc-900 dark:text-white">
+                  Tech Quiz Workstation Inactive
+                </h2>
+                <p className="text-xs text-zinc-600 dark:text-[#a1a1aa] leading-relaxed">
+                  This workstation is locked. Please wait for the Lab Coordinator to initiate Round 1 from their control portal.
+                </p>
+              </div>
+
+              <div className="p-3 bg-zinc-100 dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 text-xs font-mono text-zinc-500 dark:text-zinc-400">
+                Current Status: <span className="text-red-500 font-bold">{eventState?.status || 'REGISTRATION'}</span>
+              </div>
+
+              <button
+                onClick={() => setCurrentScreen('dashboard')}
+                className="w-full py-3 rounded-xl bg-[#D60303] hover:bg-[#A30B1A] text-white text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer shadow-md btn-interactive"
+              >
+                <span>Return to Participant Dashboard</span>
+              </button>
+            </div>
+          </main>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-transparent text-[#595959] dark:text-[#f4f4f5] flex flex-col transition-colors duration-200">

@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 
 export default function Sidebar() {
-  const { currentScreen, setCurrentScreen, navigateToRound, currentUser, isRoundUnlocked } = useApp();
+  const { currentScreen, setCurrentScreen, navigateToRound, currentUser, isRoundUnlocked, eventState } = useApp();
 
   const role = currentUser?.role;
 
@@ -32,22 +32,22 @@ export default function Sidebar() {
     {
       id: 'round1',
       label: 'Round 1 — Tech Quiz',
-      icon: CheckCircle2,
-      status: isRoundUnlocked(1) ? 'active' : 'locked',
+      icon: isRoundUnlocked(1) ? CheckCircle2 : Lock,
+      status: isRoundUnlocked(1) ? (eventState?.status === 'ROUND_1_RUNNING' ? 'active' : 'unlocked') : 'locked',
       targetScreen: 'round1'
     },
     {
       id: 'round2',
       label: 'Round 2 — Debug It',
-      icon: Code2,
-      status: isRoundUnlocked(2) ? 'active' : 'locked',
+      icon: isRoundUnlocked(2) ? Code2 : Lock,
+      status: isRoundUnlocked(2) ? (eventState?.status === 'ROUND_2_RUNNING' ? 'active' : 'unlocked') : 'locked',
       targetScreen: 'round2'
     },
     {
       id: 'round3',
       label: 'Round 3 — Tech Hunt',
       icon: Lock,
-      status: isRoundUnlocked(3) ? 'active' : 'locked',
+      status: isRoundUnlocked(3) ? (eventState?.status === 'ROUND_3_RUNNING' ? 'active' : 'unlocked') : 'locked',
       targetScreen: 'round3'
     }
   ];

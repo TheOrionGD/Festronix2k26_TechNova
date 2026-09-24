@@ -669,19 +669,39 @@ export default function LandingPage() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-zinc-200 dark:border-zinc-800 text-zinc-400">
-                  <th className="py-2 px-3">RANK</th>
-                  <th className="py-2 px-3">PARTICIPANT ID</th>
-                  <th className="py-2 px-3">TOTAL SCORE</th>
+                  <th className="py-2 px-3 text-center">RANK</th>
+                  <th className="py-2 px-3">PARTICIPANT</th>
+                  <th className="py-2 px-3 text-center">ROUND 1</th>
+                  <th className="py-2 px-3 text-center">ROUND 2</th>
+                  <th className="py-2 px-3 text-center">ROUND 3</th>
+                  <th className="py-2 px-3 text-right">TOTAL SCORE</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/60">
-                {leaderboard.slice(0, 5).map((item, idx) => (
-                  <tr key={item.id || idx} className="hover:bg-zinc-50 dark:hover:bg-zinc-900/50 transition">
-                    <td className="py-2.5 px-3 font-bold text-[#D60303]">#{idx + 1}</td>
-                    <td className="py-2.5 px-3 font-medium text-zinc-900 dark:text-white">{item.name || item.id}</td>
-                    <td className="py-2.5 px-3 font-bold text-emerald-600 dark:text-emerald-400">{item.totalScore || 0} PTS</td>
-                  </tr>
-                ))}
+                {leaderboard.slice(0, 10).map((item, idx) => {
+                  const displayRank = item.rank || (idx + 1);
+                  return (
+                    <tr key={item.id || idx} className="hover:bg-zinc-50 dark:hover:bg-zinc-900/50 transition">
+                      <td className="py-2.5 px-3 text-center font-bold text-[#D60303]">
+                        {displayRank === 1 ? '🥇 #1' : displayRank === 2 ? '🥈 #2' : displayRank === 3 ? '🥉 #3' : `#${displayRank}`}
+                      </td>
+                      <td className="py-2.5 px-3 font-medium text-zinc-900 dark:text-white flex items-center gap-2">
+                        <span>{item.name || item.id}</span>
+                        {item.qualifiedR3 ? (
+                          <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-500 border border-amber-500/20">R3 Finalist</span>
+                        ) : item.qualifiedR2 ? (
+                          <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">R2 Qualifier</span>
+                        ) : null}
+                      </td>
+                      <td className="py-2.5 px-3 text-center text-zinc-600 dark:text-zinc-300">{item.r1 ?? item.r1Score ?? 0}</td>
+                      <td className="py-2.5 px-3 text-center text-zinc-600 dark:text-zinc-300">{item.r2 ?? item.r2Score ?? 0}</td>
+                      <td className="py-2.5 px-3 text-center text-zinc-600 dark:text-zinc-300">{item.r3 ?? item.r3Score ?? 0}</td>
+                      <td className="py-2.5 px-3 text-right font-bold text-emerald-600 dark:text-emerald-400">
+                        {item.total ?? item.totalScore ?? 0} PTS
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

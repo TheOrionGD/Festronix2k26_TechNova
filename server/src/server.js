@@ -869,6 +869,7 @@ app.put('/api/event/settings', async (req, res) => {
       updatedState = memoryStore.eventState;
     }
     io.emit('eventState:updated', updatedState);
+    io.emit('event:state_changed', updatedState);
     res.json({ success: true, eventState: updatedState });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -913,52 +914,229 @@ app.get('/api/dashboard/stats', async (req, res) => {
   }
 });
 
-app.get('/api/leaderboard', async (req, res) => {
-  try {
-    let participants = [];
-    let quizAttemptsList = [];
-    let submissions = [];
-    let huntAttemptsList = [];
+// ----------------------------------------------------
+// LEADERBOARD COMPUTATION & SEQUENTIAL QUALIFICATION HELPER
+// ----------------------------------------------------
 
-    if (isDbConnected) {
-      participants = await User.find({ role: 'PARTICIPANT' });
-      quizAttemptsList = await QuizAttempt.find({ status: 'SUBMITTED' });
-      submissions = await Submission.find({ status: 'VERIFIED' });
-      huntAttemptsList = await HuntAttempt.find();
-    } else {
-      participants = memoryStore.users.filter(u => u.role === 'PARTICIPANT');
-      quizAttemptsList = Object.values(memoryStore.quizAttempts).filter(a => a.status === 'SUBMITTED');
-      submissions = memoryStore.submissions.filter(s => s.status === 'VERIFIED');
-      huntAttemptsList = Object.values(memoryStore.huntAttempts);
+async function computeLeaderboardData() {
+  let participants = [];
+  let quizAttemptsList = [];
+  let submissions = [];
+  let huntAttemptsList = [];
+
+  if (isDbConnected) {
+    participants = await User.find({ role: 'PARTICIPANT' });
+    quizAttemptsList = await QuizAttempt.find({ status: 'SUBMITTED' });
+    submissions = await Submission.find({ status: 'VERIFIED' });
+    huntAttemptsList = await HuntAttempt.find();
+  } else {
+    participants = memoryStore.users.filter(u => u.role === 'PARTICIPANT');
+    quizAttemptsList = Object.values(memoryStore.quizAttempts).filter(a => a.status === 'SUBMITTED');
+    submissions = memoryStore.submissions.filter(s => s.status === 'VERIFIED');
+    huntAttemptsList = Object.values(memoryStore.huntAttempts);
+  }
+
+  const state = await getEventState();
+  const r1QualifyLimit = state.round1QualifyCount || 30;
+  const r2QualifyLimit = state.round2QualifyCount || 10;
+  const isR1EndedOrFurther = ['ROUND_1_ENDED', 'ROUND_2_READY', 'ROUND_2_RUNNING', 'ROUND_2_ENDED', 'ROUND_3_READY', 'ROUND_3_RUNNING', 'COMPLETED'].includes(state.status);
+  const isR2EndedOrFurther = ['ROUND_2_ENDED', 'ROUND_3_READY', 'ROUND_3_RUNNING', 'COMPLETED'].includes(state.status);
+  const isEventCompleted = state.status === 'COMPLETED';
+
+  // 1. Build participant base records
+  const rawList = participants.map(p => {
+    const qAttempt = quizAttemptsList.find(a => a.participantId === p.id);
+    const r2Subs = submissions.filter(s => s.participantId === p.id);
+    const hAttempt = huntAttemptsList.find(a => a.participantId === p.id);
+
+    const r1Score = qAttempt ? (qAttempt.score || 0) : 0;
+    const r1SubmittedAt = qAttempt?.submittedAt ? new Date(qAttempt.submittedAt).getTime() : (qAttempt?.updatedAt ? new Date(qAttempt.updatedAt).getTime() : 0);
+    const r1Duration = (qAttempt?.startedAt && qAttempt?.submittedAt) 
+      ? (new Date(qAttempt.submittedAt).getTime() - new Date(qAttempt.startedAt).getTime()) 
+      : 999999999;
+    const hasAttemptedR1 = !!qAttempt;
+
+    const r2Score = r2Subs.reduce((acc, curr) => acc + (curr.marks || 0), 0);
+    const r2LatestVerified = r2Subs.length > 0 
+      ? Math.max(...r2Subs.map(s => s.verifiedAt ? new Date(s.verifiedAt).getTime() : 0)) 
+      : 0;
+    const hasAttemptedR2 = r2Subs.length > 0;
+
+    const r3Score = hAttempt ? (hAttempt.score || 0) : 0;
+    const r3SubmittedAt = hAttempt?.updatedAt ? new Date(hAttempt.updatedAt).getTime() : 0;
+    const hasAttemptedR3 = !!hAttempt;
+
+    return {
+      id: p.id,
+      name: p.name,
+      email: p.email,
+      college: p.college,
+      department: p.department,
+      year: p.year,
+      r1Score,
+      r1SubmittedAt,
+      r1Duration,
+      hasAttemptedR1,
+      r2Score,
+      r2LatestVerified,
+      hasAttemptedR2,
+      r3Score,
+      r3SubmittedAt,
+      hasAttemptedR3,
+      totalScore: r1Score + r2Score + r3Score
+    };
+  });
+
+  // 2. Step 1: Round 1 Sorting & Round 2 Selection
+  // Primary: r1Score DESC, Secondary: r1Duration ASC (fastest time), Tertiary: r1SubmittedAt ASC
+  const r1Sorted = [...rawList].sort((a, b) => {
+    if (b.r1Score !== a.r1Score) return b.r1Score - a.r1Score;
+    if (a.r1Duration !== b.r1Duration) return a.r1Duration - b.r1Duration;
+    if (a.r1SubmittedAt && b.r1SubmittedAt) return a.r1SubmittedAt - b.r1SubmittedAt;
+    return a.id.localeCompare(b.id);
+  });
+
+  // Assign R1 ranks & determine R2 qualification
+  const r1RankMap = new Map();
+  const qualifiedR2Set = new Set();
+
+  r1Sorted.forEach((p, idx) => {
+    const rank = idx + 1;
+    r1RankMap.set(p.id, rank);
+    // Qualified for Round 2 if within cutoff
+    if (rank <= r1QualifyLimit && (p.hasAttemptedR1 || state.status === 'REGISTRATION' || !isR1EndedOrFurther || p.r1Score > 0)) {
+      qualifiedR2Set.add(p.id);
+    }
+  });
+
+  // 3. Step 2: Round 2 Sorting & Round 3 Selection
+  // Only R2 qualifiers compete for R3 selection
+  const r2QualifiersList = rawList.filter(p => qualifiedR2Set.has(p.id));
+  const r2Sorted = [...r2QualifiersList].sort((a, b) => {
+    const aR1R2 = a.r1Score + a.r2Score;
+    const bR1R2 = b.r1Score + b.r2Score;
+    if (bR1R2 !== aR1R2) return bR1R2 - aR1R2;
+    if (b.r2Score !== a.r2Score) return b.r2Score - a.r2Score;
+    if (a.r2LatestVerified && b.r2LatestVerified) return a.r2LatestVerified - b.r2LatestVerified;
+    return (r1RankMap.get(a.id) || 999) - (r1RankMap.get(b.id) || 999);
+  });
+
+  const r2RankMap = new Map();
+  const qualifiedR3Set = new Set();
+
+  r2Sorted.forEach((p, idx) => {
+    const rank = idx + 1;
+    r2RankMap.set(p.id, rank);
+    if (rank <= r2QualifyLimit && (p.hasAttemptedR2 || !isR2EndedOrFurther || p.r2Score > 0)) {
+      qualifiedR3Set.add(p.id);
+    }
+  });
+
+  // 4. Step 3: Final Overall Ranking
+  // Sort entire leaderboard prioritizing progression tier, then cumulative score
+  const finalLeaderboard = [...rawList].sort((a, b) => {
+    const aInR3 = qualifiedR3Set.has(a.id);
+    const bInR3 = qualifiedR3Set.has(b.id);
+    const aInR2 = qualifiedR2Set.has(a.id);
+    const bInR2 = qualifiedR2Set.has(b.id);
+
+    // If in Round 3 active or completed, R3 qualifiers are top tier
+    if (isR2EndedOrFurther) {
+      if (aInR3 && !bInR3) return -1;
+      if (!aInR3 && bInR3) return 1;
+    }
+    
+    // If Round 1 completed, R2 qualifiers are above R1 eliminated
+    if (isR1EndedOrFurther) {
+      if (aInR2 && !bInR2) return -1;
+      if (!aInR2 && bInR2) return 1;
     }
 
-    const board = participants.map(p => {
-      const qAttempt = quizAttemptsList.find(a => a.participantId === p.id);
-      const r2Subs = submissions.filter(s => s.participantId === p.id);
-      const hAttempt = huntAttemptsList.find(a => a.participantId === p.id);
+    // Inside tier, sort by totalScore DESC
+    if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
+    if (b.r3Score !== a.r3Score) return b.r3Score - a.r3Score;
+    if (b.r2Score !== a.r2Score) return b.r2Score - a.r2Score;
+    if (b.r1Score !== a.r1Score) return b.r1Score - a.r1Score;
+    return a.id.localeCompare(b.id);
+  });
 
-      const r1Score = qAttempt ? qAttempt.score : 0;
-      const r2Score = r2Subs.reduce((acc, curr) => acc + (curr.marks || 0), 0);
-      const r3Score = hAttempt ? hAttempt.score : 0;
-      const total = r1Score + r2Score + r3Score;
+  // 5. Format sanitized output
+  const formattedLeaderboard = finalLeaderboard.map((item, idx) => {
+    const overallRank = idx + 1;
+    const isQualifiedR2 = qualifiedR2Set.has(item.id);
+    const isQualifiedR3 = qualifiedR3Set.has(item.id);
+    const r1R = r1RankMap.get(item.id) || overallRank;
+    const r2R = r2RankMap.get(item.id) || null;
 
-      return {
-        id: p.id,
-        name: p.name,
-        college: p.college,
-        r1: r1Score,
-        r2: r2Score,
-        r3: r3Score,
-        total,
-        flags: 0,
-        status: total > 0 ? 'Qualified' : 'Registered'
-      };
+    let statusText = 'Registered';
+    let qualificationStatus = 'REGISTERED';
+
+    if (isEventCompleted) {
+      if (overallRank === 1) { statusText = '🥇 1st Place (Champion)'; qualificationStatus = 'PODIUM_WINNER'; }
+      else if (overallRank === 2) { statusText = '🥈 2nd Place (Runner Up)'; qualificationStatus = 'PODIUM_WINNER'; }
+      else if (overallRank === 3) { statusText = '🥉 3rd Place'; qualificationStatus = 'PODIUM_WINNER'; }
+      else if (isQualifiedR3) { statusText = 'Round 3 Finalist'; qualificationStatus = 'QUALIFIED_R3'; }
+      else if (isQualifiedR2) { statusText = 'Round 2 Qualifier'; qualificationStatus = 'QUALIFIED_R2'; }
+      else { statusText = 'Completed'; qualificationStatus = 'COMPLETED'; }
+    } else if (state.status.startsWith('ROUND_3')) {
+      if (isQualifiedR3) { statusText = '⭐ Qualified for Round 3'; qualificationStatus = 'QUALIFIED_R3'; }
+      else { statusText = 'Eliminated in Round 2'; qualificationStatus = 'ELIMINATED'; }
+    } else if (state.status.startsWith('ROUND_2')) {
+      if (isQualifiedR2) { statusText = '⭐ Qualified for Round 2'; qualificationStatus = 'QUALIFIED_R2'; }
+      else { statusText = 'Eliminated in Round 1'; qualificationStatus = 'ELIMINATED'; }
+    } else if (state.status === 'ROUND_1_ENDED') {
+      if (isQualifiedR2) { statusText = '⭐ Qualified for Round 2'; qualificationStatus = 'QUALIFIED_R2'; }
+      else { statusText = 'Eliminated in Round 1'; qualificationStatus = 'ELIMINATED'; }
+    } else if (state.status === 'ROUND_1_RUNNING') {
+      statusText = item.hasAttemptedR1 ? 'Round 1 Submitted' : 'Round 1 Active';
+      qualificationStatus = 'IN_CONTENTION';
+    }
+
+    return {
+      id: item.id,
+      name: item.name,
+      college: item.college,
+      department: item.department,
+      year: item.year,
+      r1: item.r1Score,
+      r1Score: item.r1Score,
+      r1Rank: r1R,
+      r2: item.r2Score,
+      r2Score: item.r2Score,
+      r2Rank: r2R,
+      r3: item.r3Score,
+      r3Score: item.r3Score,
+      total: item.totalScore,
+      totalScore: item.totalScore,
+      rank: overallRank,
+      qualifiedR2: isQualifiedR2,
+      qualifiedForRound2: isQualifiedR2,
+      qualifiedR3: isQualifiedR3,
+      qualifiedForRound3: isQualifiedR3,
+      isWinner: overallRank <= 3 && item.totalScore > 0,
+      status: statusText,
+      qualificationStatus
+    };
+  });
+
+  const qualifySettings = {
+    round1QualifyCount: r1QualifyLimit,
+    round2QualifyCount: r2QualifyLimit,
+    status: state.status,
+    activeRound: state.activeRound
+  };
+
+  return { formattedLeaderboard, qualifySettings, qualifiedR2Set, qualifiedR3Set };
+}
+
+app.get('/api/leaderboard', async (req, res) => {
+  try {
+    const { formattedLeaderboard, qualifySettings } = await computeLeaderboardData();
+    res.json({ 
+      success: true, 
+      leaderboard: formattedLeaderboard,
+      qualifySettings
     });
-
-    board.sort((a, b) => b.total - a.total);
-    const rankedBoard = board.map((item, idx) => ({ ...item, rank: idx + 1 }));
-
-    res.json({ success: true, leaderboard: rankedBoard });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -1187,6 +1365,12 @@ app.post('/api/quiz/start', async (req, res) => {
 
   try {
     const state = await getEventState();
+    if (!['ROUND_1_RUNNING', 'ROUND_1_ACTIVE'].includes(state.status)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Round 1 Quiz is currently locked. It will activate when the coordinator initiates Round 1.'
+      });
+    }
     const requiredCount = state.round1MaxQuestions || 20;
 
     // 1. Fetch active question bank
@@ -1649,6 +1833,22 @@ app.post('/api/debug/start', async (req, res) => {
   if (!participantId) return res.status(400).json({ success: false, message: 'Participant ID required.' });
 
   try {
+    const state = await getEventState();
+    if (!['ROUND_2_RUNNING', 'ROUND_2_ACTIVE'].includes(state.status)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Round 2 is currently locked. It will activate when the coordinator initiates Round 2.'
+      });
+    }
+
+    const { qualifiedR2Set } = await computeLeaderboardData();
+    if (qualifiedR2Set.size > 0 && !qualifiedR2Set.has(participantId)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access Restricted: You have not qualified for Round 2 based on Round 1 leaderboard rankings.'
+      });
+    }
+
     let activeProblems = [];
     if (isDbConnected) activeProblems = await DebugProblem.find({ status: 'ACTIVE' });
     else activeProblems = memoryStore.debugProblems.filter(p => p.status === 'ACTIVE');
@@ -2063,6 +2263,22 @@ app.post('/api/hunt/start', async (req, res) => {
   if (!participantId) return res.status(400).json({ success: false, message: 'Participant ID required.' });
 
   try {
+    const state = await getEventState();
+    if (!['ROUND_3_RUNNING', 'ROUND_3_ACTIVE'].includes(state.status)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Round 3 is currently locked. It will activate when the coordinator initiates Round 3.'
+      });
+    }
+
+    const { qualifiedR3Set } = await computeLeaderboardData();
+    if (qualifiedR3Set.size > 0 && !qualifiedR3Set.has(participantId)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access Restricted: You have not qualified for Round 3 Finals based on cumulative round rankings.'
+      });
+    }
+
     let activeClues = [];
     if (isDbConnected) activeClues = await TechClue.find({ status: 'ACTIVE' }).sort({ station: 1, order: 1 });
     else activeClues = memoryStore.techClues.filter(c => c.status === 'ACTIVE').sort((a, b) => a.station - b.station);

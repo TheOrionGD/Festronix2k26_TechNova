@@ -17,7 +17,8 @@ import {
   UserPlus,
   Edit3,
   X,
-  KeyRound
+  KeyRound,
+  Sparkles
 } from 'lucide-react';
 
 export default function AdminPortal() {
@@ -26,11 +27,16 @@ export default function AdminPortal() {
     updateEventState,
     antiCheatFlags,
     leaderboard,
+    fetchLeaderboard,
     questions,
     fetchQuestions
   } = useApp();
 
   const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'coordinators' | 'qualifications' | 'questions' | 'audit'
+
+  // Leaderboard Filter & Search
+  const [leaderboardFilter, setLeaderboardFilter] = useState('ALL'); // 'ALL' | 'R1' | 'R2' | 'R3'
+  const [leaderboardSearch, setLeaderboardSearch] = useState('');
 
   // Editable Event Settings
   const [r1Qualify, setR1Qualify] = useState(eventState.round1QualifyCount);
@@ -623,54 +629,202 @@ export default function AdminPortal() {
             </div>
           )}
 
-          {/* TAB 3: Live Leaderboard */}
-          {activeTab === 'qualifications' && (
-            <div className="bg-white dark:bg-[#141417] p-6 rounded-2xl border border-zinc-200 dark:border-[#27272a] shadow-sm space-y-4 card-hover-lift animate-slide-up relative z-20">
-              <h3 className="text-base font-bold text-zinc-900 dark:text-white flex items-center gap-2">
-                <span className="text-[#D60303]">★</span> Live Participant Scoreboard
-              </h3>
+          {/* TAB 3: Live Leaderboard & Round Progression */}
+          {activeTab === 'qualifications' && (() => {
+            const r1Cutoff = eventState?.round1QualifyCount || 30;
+            const r2Cutoff = eventState?.round2QualifyCount || 10;
 
-              {leaderboard.length === 0 ? (
-                <div className="p-8 text-center text-[#595959] dark:text-[#a1a1aa] text-xs font-medium">
-                  No participants registered yet.
+            let filteredList = [...leaderboard];
+
+            if (leaderboardFilter === 'R1') {
+              filteredList = [...leaderboard].sort((a, b) => (b.r1 || b.r1Score || 0) - (a.r1 || a.r1Score || 0));
+            } else if (leaderboardFilter === 'R2') {
+              filteredList = [...leaderboard]
+                .filter(u => u.qualifiedR2 || u.qualifiedForRound2)
+                .sort((a, b) => ((b.r1 || 0) + (b.r2 || 0)) - ((a.r1 || 0) + (a.r2 || 0)));
+            } else if (leaderboardFilter === 'R3') {
+              filteredList = [...leaderboard]
+                .filter(u => u.qualifiedR3 || u.qualifiedForRound3)
+                .sort((a, b) => (b.total || b.totalScore || 0) - (a.total || a.totalScore || 0));
+            }
+
+            if (leaderboardSearch.trim()) {
+              const q = leaderboardSearch.toLowerCase();
+              filteredList = filteredList.filter(u => 
+                u.name?.toLowerCase().includes(q) || 
+                u.id?.toLowerCase().includes(q) || 
+                u.college?.toLowerCase().includes(q)
+              );
+            }
+
+            return (
+              <div className="bg-white dark:bg-[#141417] p-6 rounded-2xl border border-zinc-200 dark:border-[#27272a] shadow-sm space-y-4 card-hover-lift animate-slide-up relative z-20">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-200 dark:border-[#27272a] pb-4">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Trophy className="w-5 h-5 text-amber-500" />
+                      <h3 className="text-base font-bold text-zinc-900 dark:text-white">Live Participant Scoreboard & Round Progression</h3>
+                    </div>
+                    <p className="text-xs text-zinc-500 dark:text-[#a1a1aa] mt-0.5">
+                      Top {r1Cutoff} in Round 1 advance to Round 2 • Top {r2Cutoff} in Round 2 advance to Round 3 Finals.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={fetchLeaderboard}
+                      className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-[#D60303] text-white text-xs font-bold font-mono transition cursor-pointer btn-interactive flex items-center gap-1.5 shadow-xs"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                      <span>↻ Refresh Scores</span>
+                    </button>
+                  </div>
                 </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-[#EFEEEA] dark:bg-[#09090b] text-[#18181B] dark:text-[#f4f4f5] font-mono border-b border-zinc-200 dark:border-[#27272a]">
-                      <tr>
-                        <th className="p-3">Rank</th>
-                        <th className="p-3">ID</th>
-                        <th className="p-3">Participant Name</th>
-                        <th className="p-3 text-center">Round 1</th>
-                        <th className="p-3 text-center">Round 2</th>
-                        <th className="p-3 text-center">Round 3</th>
-                        <th className="p-3 text-center">Total</th>
-                        <th className="p-3 text-center">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-zinc-200 dark:divide-[#27272a] text-[#595959] dark:text-[#a1a1aa]">
-                      {leaderboard.map(row => (
-                        <tr key={row.id} className="hover:bg-zinc-50 dark:hover:bg-[#1a1a1e] transition-colors font-medium">
-                          <td className="p-3 font-bold text-[#D60303]">#{row.rank}</td>
-                          <td className="p-3 font-mono text-zinc-700 dark:text-zinc-300 font-bold">{row.id}</td>
-                          <td className="p-3 font-semibold text-zinc-900 dark:text-white">{row.name}</td>
-                          <td className="p-3 text-center text-[#A30B1A] dark:text-[#ef4444] font-bold">{row.r1}</td>
-                          <td className="p-3 text-center text-[#C23D31] font-bold">{row.r2}</td>
-                          <td className="p-3 text-center text-[#D60303] font-bold">{row.r3}</td>
-                          <td className="p-3 text-center font-bold text-[#A30B1A] dark:text-white">{row.total} pts</td>
-                          <td className="p-3 text-center">
-                            <span className="px-2 py-0.5 rounded bg-[#D60303] text-white font-bold text-[10px]">
-                              {row.status}
-                            </span></td>
+
+                {/* Filter and Search Bar */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-1">
+                  <div className="flex flex-wrap items-center gap-2 text-xs font-mono font-bold">
+                    <button
+                      onClick={() => setLeaderboardFilter('ALL')}
+                      className={`px-3 py-1.5 rounded-xl transition cursor-pointer ${
+                        leaderboardFilter === 'ALL'
+                          ? 'bg-[#D60303] text-white shadow-xs'
+                          : 'bg-zinc-100 dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-800'
+                      }`}
+                    >
+                      All Overall Standings ({leaderboard.length})
+                    </button>
+
+                    <button
+                      onClick={() => setLeaderboardFilter('R1')}
+                      className={`px-3 py-1.5 rounded-xl transition cursor-pointer flex items-center gap-1.5 ${
+                        leaderboardFilter === 'R1'
+                          ? 'bg-[#D60303] text-white shadow-xs'
+                          : 'bg-zinc-100 dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-800'
+                      }`}
+                    >
+                      <span>Round 1 Results</span>
+                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-white/20">Top {r1Cutoff} Qualify</span>
+                    </button>
+
+                    <button
+                      onClick={() => setLeaderboardFilter('R2')}
+                      className={`px-3 py-1.5 rounded-xl transition cursor-pointer flex items-center gap-1.5 ${
+                        leaderboardFilter === 'R2'
+                          ? 'bg-[#D60303] text-white shadow-xs'
+                          : 'bg-zinc-100 dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-800'
+                      }`}
+                    >
+                      <span>Round 2 Qualifiers</span>
+                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-white/20">Top {r2Cutoff} Finalists</span>
+                    </button>
+
+                    <button
+                      onClick={() => setLeaderboardFilter('R3')}
+                      className={`px-3 py-1.5 rounded-xl transition cursor-pointer flex items-center gap-1.5 ${
+                        leaderboardFilter === 'R3'
+                          ? 'bg-[#D60303] text-white shadow-xs'
+                          : 'bg-zinc-100 dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-800'
+                      }`}
+                    >
+                      <span>🏆 Round 3 Podium</span>
+                    </button>
+                  </div>
+
+                  <input
+                    type="text"
+                    value={leaderboardSearch}
+                    onChange={(e) => setLeaderboardSearch(e.target.value)}
+                    placeholder="Search by ID, Name or College..."
+                    className="px-3 py-1.5 bg-[#F8F7F4] dark:bg-[#09090b] border border-zinc-200 dark:border-[#27272a] rounded-xl text-xs outline-none focus:border-[#D60303] w-full md:w-64 text-zinc-900 dark:text-zinc-100"
+                  />
+                </div>
+
+                {/* Cutoff Explanatory Pill */}
+                <div className="p-2.5 bg-zinc-100 dark:bg-zinc-900/60 rounded-xl border border-zinc-200 dark:border-zinc-800/80 text-[11px] font-mono flex flex-wrap items-center justify-between gap-2 text-zinc-600 dark:text-zinc-400">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    <span>Progression Tier: Round 1 (Top {r1Cutoff}) ➔ Round 2 (Top {r2Cutoff}) ➔ Round 3 Podium</span>
+                  </div>
+                  <span className="text-zinc-500">Showing {filteredList.length} participants</span>
+                </div>
+
+                {filteredList.length === 0 ? (
+                  <div className="p-8 text-center text-[#595959] dark:text-[#a1a1aa] text-xs font-medium">
+                    No participants matching query or criteria.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-[#27272a]">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-[#EFEEEA] dark:bg-[#09090b] text-[#18181B] dark:text-[#f4f4f5] font-mono border-b border-zinc-200 dark:border-[#27272a]">
+                          <th className="p-3 text-center">Rank</th>
+                          <th className="p-3">Participant ID</th>
+                          <th className="p-3">Name</th>
+                          <th className="p-3">College</th>
+                          <th className="p-3 text-center">Round 1 (Quiz)</th>
+                          <th className="p-3 text-center">Round 2 (Debug)</th>
+                          <th className="p-3 text-center">Round 3 (Hunt)</th>
+                          <th className="p-3 text-center font-bold text-[#D60303]">Total Score</th>
+                          <th className="p-3 text-center">Status / Qualification</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
+                      </thead>
+                      <tbody className="divide-y divide-zinc-200 dark:divide-[#27272a] text-zinc-800 dark:text-zinc-200">
+                        {filteredList.map((u, idx) => {
+                          const displayRank = u.rank || (idx + 1);
+                          return (
+                            <tr
+                              key={u.id || idx}
+                              className={`transition-colors ${
+                                displayRank === 1 ? 'bg-amber-500/10 dark:bg-amber-500/5 hover:bg-amber-500/15 font-semibold' :
+                                displayRank === 2 ? 'bg-zinc-200/40 dark:bg-zinc-800/40 hover:bg-zinc-200/60 font-semibold' :
+                                displayRank === 3 ? 'bg-amber-700/10 dark:bg-amber-700/5 hover:bg-amber-700/15 font-semibold' :
+                                'hover:bg-zinc-50 dark:hover:bg-zinc-900/40'
+                              }`}
+                            >
+                              <td className="p-3 text-center font-mono font-bold">
+                                {displayRank === 1 ? '🥇 1' : displayRank === 2 ? '🥈 2' : displayRank === 3 ? '🥉 3' : `#${displayRank}`}
+                              </td>
+                              <td className="p-3 font-mono font-bold text-[#D60303]">{u.id}</td>
+                              <td className="p-3 font-semibold">{u.name}</td>
+                              <td className="p-3 text-zinc-600 dark:text-zinc-400">{u.college}</td>
+                              <td className="p-3 text-center font-mono font-bold text-zinc-900 dark:text-zinc-100">
+                                {u.r1 ?? u.r1Score ?? u.round1Score ?? 0}
+                              </td>
+                              <td className="p-3 text-center font-mono font-bold text-zinc-900 dark:text-zinc-100">
+                                {u.r2 ?? u.r2Score ?? u.round2Score ?? 0}
+                              </td>
+                              <td className="p-3 text-center font-mono font-bold text-zinc-900 dark:text-zinc-100">
+                                {u.r3 ?? u.r3Score ?? u.round3Score ?? 0}
+                              </td>
+                              <td className="p-3 text-center font-mono font-bold text-[#D60303] text-sm">
+                                {u.total ?? u.totalScore ?? 0} pts
+                              </td>
+                              <td className="p-3 text-center">
+                                {u.qualifiedR3 || u.qualifiedForRound3 ? (
+                                  <span className="px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 font-mono font-bold text-[10px] border border-amber-500/30 inline-flex items-center gap-1">
+                                    🏆 Finalist (R3)
+                                  </span>
+                                ) : u.qualifiedR2 || u.qualifiedForRound2 ? (
+                                  <span className="px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-mono font-bold text-[10px] border border-emerald-500/30 inline-flex items-center gap-1">
+                                    ⭐ Qualified (R2)
+                                  </span>
+                                ) : (
+                                  <span className="px-2.5 py-0.5 rounded-full bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-mono font-medium text-[10px]">
+                                    {u.status || 'Registered'}
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* TAB 4: Question & Content Bank Management Hub */}
           {activeTab === 'questions' && (
