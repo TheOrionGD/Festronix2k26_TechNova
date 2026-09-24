@@ -19,7 +19,7 @@ export default function Round2Debug() {
 
   const [problems, setProblems] = useState([]);
   const [currentProbIdx, setCurrentProbIdx] = useState(0);
-  const [participantCode, setParticipantCode] = useState('');
+  const [userDrafts, setUserDrafts] = useState({});
   const [submissions, setSubmissions] = useState({});
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState(null);
@@ -34,6 +34,9 @@ export default function Round2Debug() {
 
         if (checkData.success && checkData.hasAttempt) {
           setProblems(checkData.problems || []);
+          if (checkData.submissions) {
+            setSubmissions(checkData.submissions);
+          }
           setIsLoading(false);
           return;
         }
@@ -47,6 +50,9 @@ export default function Round2Debug() {
 
         if (startData.success) {
           setProblems(startData.problems || []);
+          if (startData.submissions) {
+            setSubmissions(startData.submissions);
+          }
         } else {
           setErrorMessage(startData.message);
         }
@@ -88,6 +94,11 @@ export default function Round2Debug() {
       currentProblem)
     : currentProblem;
 
+  const currentProbKey = displayedProblem?.problemId || (currentProbIdx + 1);
+  const currentCode = userDrafts[currentProbKey] !== undefined 
+    ? userDrafts[currentProbKey] 
+    : (submissions[currentProbKey]?.code || '');
+
   const handleCopyCode = () => {
     if (displayedProblem?.brokenCode) {
       navigator.clipboard.writeText(displayedProblem.brokenCode);
@@ -95,8 +106,15 @@ export default function Round2Debug() {
     }
   };
 
+  const handleCodeChange = (newCode) => {
+    setUserDrafts(prev => ({
+      ...prev,
+      [currentProbKey]: newCode
+    }));
+  };
+
   const handleSubmitCode = async () => {
-    if (!displayedProblem || !participantCode.trim()) {
+    if (!displayedProblem || !currentCode.trim()) {
       alert('Please enter your corrected solution code.');
       return;
     }
@@ -108,7 +126,7 @@ export default function Round2Debug() {
 
     setIsSubmitting(true);
     const pid = currentUser?.id;
-    const probId = displayedProblem.problemId;
+    const probId = currentProbKey;
 
     try {
       const res = await fetch(`${API_BASE}/debug/submit`, {
@@ -117,7 +135,7 @@ export default function Round2Debug() {
         body: JSON.stringify({
           participantId: pid,
           problemId: probId,
-          code: participantCode,
+          code: currentCode,
           output: 'Local execution output verified'
         })
       });
@@ -126,7 +144,7 @@ export default function Round2Debug() {
         setSubmissions(prev => ({
           ...prev,
           [probId]: {
-            code: participantCode,
+            code: currentCode,
             status: 'SUBMITTED',
             marks: 0
           }
@@ -259,15 +277,23 @@ export default function Round2Debug() {
 
                   {/* Corrected Code Textarea */}
                   <div className="space-y-2 pt-2">
-                    <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">
-                      Paste Your Debugged / Corrected Code:
-                    </label>
+                    <div className="flex items-center justify-between">
+                      <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                        Paste Your Debugged / Corrected Code for Problem #{displayedProblem?.problemNumber || (currentProbIdx + 1)}:
+                      </label>
+                      {subState.status === 'VERIFIED' && (
+                        <span className="text-[10px] text-emerald-500 font-mono font-bold">LOCKED & GRADED</span>
+                      )}
+                    </div>
                     <textarea
-                      rows={6}
-                      value={participantCode}
-                      onChange={(e) => setParticipantCode(e.target.value)}
-                      placeholder="Paste your working, debugged code here after running it locally..."
-                      className="w-full p-4 bg-[#F8F7F4] dark:bg-[#09090b] border border-zinc-300 dark:border-[#27272a] rounded-xl text-xs font-mono text-zinc-900 dark:text-[#f4f4f5] outline-none focus:border-[#D60303] transition-colors"
+                      rows={7}
+                      value={currentCode}
+                      disabled={subState.status === 'VERIFIED'}
+                      onChange={(e) => handleCodeChange(e.target.value)}
+                      placeholder={`Paste your working, debugged ${displayedProblem?.language || 'code'} here after running it locally...`}
+                      className={`w-full p-4 bg-[#F8F7F4] dark:bg-[#09090b] border border-zinc-300 dark:border-[#27272a] rounded-xl text-xs font-mono text-zinc-900 dark:text-[#f4f4f5] outline-none focus:border-[#D60303] transition-colors ${
+                        subState.status === 'VERIFIED' ? 'opacity-80 cursor-not-allowed bg-zinc-100 dark:bg-zinc-900' : ''
+                      }`}
                     />
                   </div>
 
@@ -291,7 +317,7 @@ export default function Round2Debug() {
                       <button
                         type="button"
                         onClick={() => {
-                          const targetProbId = displayedProblem?.problemId || (currentProbIdx + 1);
+                          const targetProbId = currentProbKey;
                           setPendingVerificationProblemId(targetProbId);
                           setIsCoordinatorModalOpen(true);
                         }}
@@ -326,19 +352,39 @@ export default function Round2Debug() {
                     {problems.map((p, idx) => {
                       const isCurrent = idx === currentProbIdx;
                       const isBonus = idx === 3 || p.isBonus;
+                      const pKey = p.problemId || (idx + 1);
+                      const pSub = submissions[pKey];
+                      const isVerified = pSub?.status === 'VERIFIED';
+                      const isSubmitted = pSub?.status === 'SUBMITTED';
+
                       return (
                         <button
-                          key={p.problemId}
-                          onClick={() => {
-                            setCurrentProbIdx(idx);
-                            setParticipantCode(submissions[p.problemId]?.code);
-                          }}
+                          key={p.problemId || idx}
+                          onClick={() => setCurrentProbIdx(idx)}
                           className={`w-full p-3 rounded-xl text-left text-xs font-bold transition-all duration-200 flex items-center justify-between cursor-pointer btn-interactive ${isCurrent
                               ? 'bg-[#D60303] text-white shadow-sm transform translate-x-1'
                               : 'bg-[#F8F7F4] dark:bg-[#09090b] border border-zinc-200 dark:border-[#27272a] text-zinc-700 dark:text-[#a1a1aa] hover:bg-zinc-200 dark:hover:bg-[#1a1a1e]'
                             }`}
                         >
-                          <span>Problem #{p.problemNumber} {isBonus ? '(Bonus Practice)' : `(${p.language})`}</span>
+                          <div className="flex items-center gap-2">
+                            {isVerified ? (
+                              <CheckCircle2 className={`w-4 h-4 ${isCurrent ? 'text-white' : 'text-emerald-500'}`} />
+                            ) : isSubmitted ? (
+                              <Clock className={`w-4 h-4 ${isCurrent ? 'text-white' : 'text-amber-500'}`} />
+                            ) : (
+                              <Code className="w-4 h-4 opacity-70" />
+                            )}
+                            <span>Problem #{p.problemNumber} {isBonus ? '(Bonus)' : `(${p.language})`}</span>
+                          </div>
+                          {isVerified ? (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono">
+                              {pSub.marks} pts
+                            </span>
+                          ) : isSubmitted ? (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono">
+                              Pending
+                            </span>
+                          ) : null}
                         </button>
                       );
                     })}

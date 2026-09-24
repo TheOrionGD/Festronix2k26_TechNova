@@ -6,8 +6,27 @@ export { AppContext };
 
 export const AppProvider = ({ children }) => {
   // Navigation Screens: 'splash' | 'landing' | 'login' | 'dashboard' | 'round1' | 'round2' | 'round3' | 'admin' | 'coordinator'
-  const [currentScreen, setCurrentScreen] = useState('splash');
-  const [currentUser, setCurrentUser] = useState(null);
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem('technova_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const [currentScreen, setCurrentScreen] = useState(() => {
+    try {
+      const saved = localStorage.getItem('technova_user');
+      if (saved) {
+        const u = JSON.parse(saved);
+        if (u.role === 'ADMIN') return 'admin';
+        if (u.role === 'COORDINATOR') return 'coordinator';
+        if (u.role === 'PARTICIPANT') return 'dashboard';
+      }
+    } catch {}
+    return 'splash';
+  });
   const [eventState, setEventState] = useState({
     status: 'REGISTRATION',
     round1MaxQuestions: 20,
@@ -234,6 +253,7 @@ export const AppProvider = ({ children }) => {
         if (data.token) {
           localStorage.setItem('technova_token', data.token);
         }
+        localStorage.setItem('technova_user', JSON.stringify(data.user));
         setCurrentUser(data.user);
 
         // Auto-redirect to dashboard matching trusted backend user role
@@ -256,8 +276,29 @@ export const AppProvider = ({ children }) => {
 
   const logoutUser = () => {
     localStorage.removeItem('technova_token');
+    localStorage.removeItem('technova_user');
     setCurrentUser(null);
     setCurrentScreen('landing');
+  };
+
+  // Broadcast New Announcement
+  const createAnnouncement = async (announcementData) => {
+    try {
+      const res = await fetch(`${API_BASE}/announcements`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(announcementData)
+      });
+      const data = await res.json();
+      if (data.success) {
+        await fetchAnnouncements();
+        return { success: true, announcement: data.announcement };
+      }
+      return { success: false, message: data.message || 'Failed to post announcement' };
+    } catch (err) {
+      console.error('Create announcement error:', err);
+      return { success: false, message: 'Server error creating announcement.' };
+    }
   };
 
   // Submit Debug Code Solution
@@ -488,6 +529,7 @@ export const AppProvider = ({ children }) => {
       updateEventState,
       leaderboard,
       announcements,
+      createAnnouncement,
       questions,
       debugProblems,
       techClues,

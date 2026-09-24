@@ -1754,7 +1754,30 @@ app.get('/api/debug/current', async (req, res) => {
       totalProblems: selectedProblems.length
     }));
 
-    res.json({ success: true, hasAttempt: true, problems: sanitizedProblems });
+    let userSubmissions = [];
+    if (isDbConnected) {
+      userSubmissions = await Submission.find({ participantId, problemId: { $gt: 0 } });
+    } else {
+      userSubmissions = memoryStore.submissions.filter(s => s.participantId === participantId && s.problemId > 0);
+    }
+
+    const submissionsMap = {};
+    userSubmissions.forEach(s => {
+      submissionsMap[s.problemId] = {
+        code: s.code,
+        output: s.output,
+        status: s.status,
+        marks: s.marks || 0,
+        verifiedBy: s.verifiedBy
+      };
+    });
+
+    res.json({ 
+      success: true, 
+      hasAttempt: true, 
+      problems: sanitizedProblems, 
+      submissions: submissionsMap 
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

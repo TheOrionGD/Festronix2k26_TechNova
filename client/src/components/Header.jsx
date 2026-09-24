@@ -30,7 +30,15 @@ export default function Header() {
     <header className="h-16 bg-white/40 dark:bg-zinc-900/50 backdrop-blur-md border-b border-red-500/50 px-6 flex items-center justify-between sticky top-0 z-40 text-[#595959] dark:text-[#f4f4f5] transition-colors duration-200 shrink-0 select-none">
       {/* Left: Branding & Subtitle */}
       <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2.5 cursor-pointer group" onClick={() => setCurrentScreen('landing')}>
+        <div 
+          className="flex items-center gap-2.5 cursor-pointer group" 
+          onClick={() => {
+            if (currentUser?.role === 'ADMIN') setCurrentScreen('admin');
+            else if (currentUser?.role === 'COORDINATOR') setCurrentScreen('coordinator');
+            else if (currentUser?.role === 'PARTICIPANT') setCurrentScreen('dashboard');
+            else setCurrentScreen('landing');
+          }}
+        >
           <div className="w-9 h-9 rounded-lg bg-white dark:bg-[#141417] border border-red-500/60 p-1 flex items-center justify-center shadow-md transition-all duration-200 group-hover:border-[#D60303] overflow-hidden">
             <img src="/technova_icon.jpg" alt="Technova Icon" className="w-full h-full object-cover rounded-md" />
           </div>
@@ -146,7 +154,14 @@ export default function Header() {
               <img src="/technova_icon.jpg" alt={currentUser.name} className="w-full h-full object-cover rounded-full" />
             </div>
             <div className="text-left hidden sm:block">
-              <p className="text-xs font-semibold text-zinc-900 dark:text-white">{currentUser.name}</p>
+              <div className="flex items-center gap-1.5">
+                <p className="text-xs font-semibold text-zinc-900 dark:text-white truncate max-w-[130px]">{currentUser.name}</p>
+                <span className={`text-[9px] font-mono font-bold px-1.5 py-0.2 rounded ${
+                  currentUser.role === 'ADMIN' ? 'bg-red-500 text-white' : currentUser.role === 'COORDINATOR' ? 'bg-amber-500 text-white' : 'bg-emerald-600 text-white'
+                }`}>
+                  {currentUser.role}
+                </span>
+              </div>
               <div className="flex items-center gap-1.5 text-[11px] text-[#595959] dark:text-[#a1a1aa] font-mono">
                 <span className="font-bold text-[#D60303]">{currentUser.id}</span>
                 {currentUser.role === 'PARTICIPANT' && (

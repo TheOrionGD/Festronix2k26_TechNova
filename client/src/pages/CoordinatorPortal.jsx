@@ -16,7 +16,14 @@ import {
   UserPlus,
   Upload,
   Trash2,
-  KeyRound
+  KeyRound,
+  Megaphone,
+  Send,
+  Radio,
+  Trophy,
+  Sparkles,
+  AlertCircle,
+  MessageSquare
 } from 'lucide-react';
 
 export default function CoordinatorPortal() {
@@ -25,12 +32,22 @@ export default function CoordinatorPortal() {
     setIsCoordinatorModalOpen, 
     setPendingVerificationProblemId, 
     fetchLeaderboard,
+    leaderboard,
+    announcements,
+    createAnnouncement,
     eventState,
     updateEventState
   } = useApp();
-  const [activeTab, setActiveTab] = useState('verification'); // 'verification' | 'participants' | 'content'
+  const [activeTab, setActiveTab] = useState('verification'); // 'verification' | 'participants' | 'announcements' | 'content' | 'leaderboard'
   const [submissionsList, setSubmissionsList] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Announcement Creation State
+  const [annTitle, setAnnTitle] = useState('');
+  const [annMessage, setAnnMessage] = useState('');
+  const [annTag, setAnnTag] = useState('ROUND_UPDATE');
+  const [isPostingAnn, setIsPostingAnn] = useState(false);
+  const [annStatusMsg, setAnnStatusMsg] = useState({ text: '', type: '' });
 
   const handleSetRoundStatus = (status, activeRound) => {
     updateEventState({ status, activeRound });
@@ -233,6 +250,38 @@ export default function CoordinatorPortal() {
     }
   };
 
+  const handlePostAnnouncement = async (e) => {
+    e.preventDefault();
+    if (!annTitle.trim() || !annMessage.trim()) {
+      setAnnStatusMsg({ text: 'Please fill in both Announcement Title and Message.', type: 'error' });
+      return;
+    }
+    setIsPostingAnn(true);
+    setAnnStatusMsg({ text: '', type: '' });
+    try {
+      const result = await createAnnouncement({
+        title: annTitle.trim(),
+        message: annMessage.trim(),
+        tag: annTag,
+        author: currentUser?.name ? `${currentUser.name} (${currentUser.id})` : currentUser?.id || 'Lab Coordinator'
+      });
+      if (result.success) {
+        setAnnTitle('');
+        setAnnMessage('');
+        setAnnTag('ROUND_UPDATE');
+        setAnnStatusMsg({ text: 'Announcement successfully broadcasted to all participants!', type: 'success' });
+        setTimeout(() => setAnnStatusMsg({ text: '', type: '' }), 5000);
+      } else {
+        setAnnStatusMsg({ text: result.message || 'Failed to post announcement.', type: 'error' });
+      }
+    } catch (err) {
+      console.error('Post announcement error:', err);
+      setAnnStatusMsg({ text: 'Server communication error.', type: 'error' });
+    } finally {
+      setIsPostingAnn(false);
+    }
+  };
+
   const handleBulkImportParticipants = async (e) => {
     e.preventDefault();
     try {
@@ -374,7 +423,7 @@ export default function CoordinatorPortal() {
                 }`}
             >
               <CheckSquare className="w-4 h-4" />
-              <span>Physical Verification Queue ({submissionsList.length})</span>
+              <span>Verification Queue ({submissionsList.length})</span>
             </button>
 
             <button
@@ -383,7 +432,16 @@ export default function CoordinatorPortal() {
                 }`}
             >
               <Users className="w-4 h-4" />
-              <span>Participant Management ({participantsList.length})</span>
+              <span>Participants ({participantsList.length})</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('announcements')}
+              className={`px-4 py-2 rounded-xl transition-all duration-200 flex items-center gap-2 cursor-pointer btn-interactive ${activeTab === 'announcements' ? 'bg-[#D60303] text-white shadow-xs' : 'bg-white/80 dark:bg-[#141417]/80 border border-zinc-200 dark:border-[#27272a] text-zinc-700 dark:text-[#a1a1aa] hover:bg-zinc-100 dark:hover:bg-[#1a1a1e]'
+                }`}
+            >
+              <Megaphone className="w-4 h-4 text-amber-300" />
+              <span>Broadcast Announcements ({announcements.length})</span>
             </button>
 
             <button
@@ -392,7 +450,16 @@ export default function CoordinatorPortal() {
                 }`}
             >
               <Database className="w-4 h-4" />
-              <span>Question & Content Management Hub</span>
+              <span>Questions & Clues Hub</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('leaderboard')}
+              className={`px-4 py-2 rounded-xl transition-all duration-200 flex items-center gap-2 cursor-pointer btn-interactive ${activeTab === 'leaderboard' ? 'bg-[#D60303] text-white shadow-xs' : 'bg-white/80 dark:bg-[#141417]/80 border border-zinc-200 dark:border-[#27272a] text-zinc-700 dark:text-[#a1a1aa] hover:bg-zinc-100 dark:hover:bg-[#1a1a1e]'
+                }`}
+            >
+              <Trophy className="w-4 h-4 text-amber-400" />
+              <span>Live Leaderboard</span>
             </button>
           </div>
 
@@ -830,10 +897,194 @@ export default function CoordinatorPortal() {
             </div>
           )}
 
-          {/* Tab 3: Content Management Hub */}
+          {/* Tab 3: Broadcast Announcements (Coordinator) */}
+          {activeTab === 'announcements' && (
+            <div className="space-y-6 animate-slide-up">
+              {/* Post New Announcement Card */}
+              <div className="bg-white/80 dark:bg-[#141417]/80 backdrop-blur-md p-6 rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80 shadow-sm space-y-4 card-hover-lift">
+                <div className="flex items-center justify-between border-b border-zinc-200 dark:border-[#27272a] pb-3">
+                  <div className="flex items-center gap-2">
+                    <Radio className="w-5 h-5 text-[#D60303] animate-pulse" />
+                    <h3 className="text-base font-bold text-zinc-900 dark:text-white">Broadcast Real-Time Event Announcement</h3>
+                  </div>
+                  <span className="text-[11px] font-mono font-bold px-2.5 py-1 rounded-full bg-red-100 dark:bg-red-950/60 text-[#D60303] border border-red-500/30">
+                    Live WebSocket Push
+                  </span>
+                </div>
+
+                {annStatusMsg.text && (
+                  <div className={`p-3 rounded-xl text-xs flex items-center gap-2 font-medium animate-slide-up ${
+                    annStatusMsg.type === 'success' 
+                      ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-500/40' 
+                      : 'bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400 border border-red-500/40'
+                  }`}>
+                    {annStatusMsg.type === 'success' ? <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-500" /> : <AlertCircle className="w-4 h-4 shrink-0 text-red-500" />}
+                    <span>{annStatusMsg.text}</span>
+                  </div>
+                )}
+
+                <form onSubmit={handlePostAnnouncement} className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="md:col-span-2">
+                      <label className="block text-xs font-bold text-zinc-700 dark:text-[#a1a1aa] mb-1 font-mono">
+                        Announcement Headline / Title
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={annTitle}
+                        onChange={(e) => setAnnTitle(e.target.value)}
+                        placeholder="e.g. Round 2 Debugging — 10 Minutes Remaining!"
+                        className="w-full px-3.5 py-2.5 bg-[#F8F7F4] dark:bg-[#09090b] border border-zinc-300 dark:border-[#27272a] rounded-xl text-xs text-zinc-900 dark:text-white focus:border-[#D60303] focus:outline-none transition-colors"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-700 dark:text-[#a1a1aa] mb-1 font-mono">
+                        Urgency / Broadcast Tag
+                      </label>
+                      <select
+                        value={annTag}
+                        onChange={(e) => setAnnTag(e.target.value)}
+                        className="w-full px-3.5 py-2.5 bg-[#F8F7F4] dark:bg-[#09090b] border border-zinc-300 dark:border-[#27272a] rounded-xl text-xs text-zinc-900 dark:text-white focus:border-[#D60303] focus:outline-none transition-colors font-mono"
+                      >
+                        <option value="ROUND_UPDATE">🔴 ROUND_UPDATE (Critical Round State)</option>
+                        <option value="URGENT">⚠️ URGENT (Action Required)</option>
+                        <option value="INFO">ℹ️ INFO (General Notification)</option>
+                        <option value="BROADCAST">📢 BROADCAST (Symposium Announcement)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-700 dark:text-[#a1a1aa] mb-1 font-mono">
+                      Announcement Detailed Body Message
+                    </label>
+                    <textarea
+                      rows={4}
+                      required
+                      value={annMessage}
+                      onChange={(e) => setAnnMessage(e.target.value)}
+                      placeholder="Write instructions, round rules update, or verification cues for participants..."
+                      className="w-full p-3.5 bg-[#F8F7F4] dark:bg-[#09090b] border border-zinc-300 dark:border-[#27272a] rounded-xl text-xs text-zinc-900 dark:text-white focus:border-[#D60303] focus:outline-none transition-colors"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2">
+                    <span className="text-[11px] text-zinc-500 dark:text-zinc-400 font-mono">
+                      Posting as: <strong className="text-zinc-800 dark:text-zinc-200">{currentUser?.name || currentUser?.id || 'Coordinator'}</strong>
+                    </span>
+
+                    <button
+                      type="submit"
+                      disabled={isPostingAnn}
+                      className="px-6 py-2.5 rounded-xl bg-[#D60303] hover:bg-[#A30B1A] disabled:opacity-50 text-white font-bold font-mono text-xs shadow-md transition flex items-center gap-2 cursor-pointer btn-interactive"
+                    >
+                      <Send className="w-4 h-4 text-white" />
+                      <span>{isPostingAnn ? 'Broadcasting to All Terminals...' : 'Broadcast Announcement'}</span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              {/* Announcements Feed */}
+              <div className="bg-white/80 dark:bg-[#141417]/80 backdrop-blur-md p-6 rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80 shadow-sm space-y-4 card-hover-lift">
+                <div className="flex items-center justify-between border-b border-zinc-200 dark:border-[#27272a] pb-3">
+                  <div className="flex items-center gap-2">
+                    <MessageSquare className="w-5 h-5 text-amber-500" />
+                    <h3 className="text-base font-bold text-zinc-900 dark:text-white">Published Announcements Feed ({announcements.length})</h3>
+                  </div>
+                </div>
+
+                {announcements.length === 0 ? (
+                  <p className="text-xs text-zinc-500 py-8 text-center font-mono">No announcements published yet.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {announcements.map((ann, idx) => (
+                      <div key={ann.id || idx} className="p-4 bg-[#F8F7F4] dark:bg-[#09090b] rounded-xl border border-zinc-200 dark:border-[#27272a] space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                              ann.tag === 'URGENT' 
+                                ? 'bg-red-500 text-white' 
+                                : ann.tag === 'ROUND_UPDATE'
+                                ? 'bg-amber-500 text-white'
+                                : 'bg-zinc-800 text-white'
+                            }`}>
+                              {ann.tag || 'INFO'}
+                            </span>
+                            <h4 className="text-xs font-bold text-zinc-900 dark:text-white font-mono">{ann.title}</h4>
+                          </div>
+                          <span className="text-[10px] font-mono text-zinc-500">{ann.time || 'Just now'}</span>
+                        </div>
+                        <p className="text-xs text-zinc-700 dark:text-zinc-300 leading-relaxed font-sans">{ann.message}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Tab 4: Content Management Hub */}
           {activeTab === 'content' && (
             <div className="animate-slide-up">
               <ContentManagementHub userRole="COORDINATOR" />
+            </div>
+          )}
+
+          {/* Tab 5: Live Competition Leaderboard */}
+          {activeTab === 'leaderboard' && (
+            <div className="bg-white/80 dark:bg-[#141417]/80 backdrop-blur-md p-6 rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80 shadow-sm space-y-4 card-hover-lift animate-slide-up">
+              <div className="flex items-center justify-between border-b border-zinc-200 dark:border-[#27272a] pb-3">
+                <div className="flex items-center gap-2">
+                  <Trophy className="w-5 h-5 text-amber-500" />
+                  <h3 className="text-base font-bold text-zinc-900 dark:text-white">Live Symposium Standings</h3>
+                </div>
+                <button
+                  onClick={fetchLeaderboard}
+                  className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-[#D60303] text-white text-xs font-bold font-mono transition cursor-pointer btn-interactive"
+                >
+                  ↻ Refresh Scores
+                </button>
+              </div>
+
+              {leaderboard.length === 0 ? (
+                <p className="text-xs text-zinc-500 py-8 text-center font-mono">No score records registered yet.</p>
+              ) : (
+                <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-[#27272a]">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-zinc-100 dark:bg-[#09090b] text-zinc-700 dark:text-[#a1a1aa] font-mono border-b border-zinc-200 dark:border-[#27272a]">
+                        <th className="p-3 text-center">Rank</th>
+                        <th className="p-3">Participant ID</th>
+                        <th className="p-3">Name</th>
+                        <th className="p-3">College</th>
+                        <th className="p-3 text-center">Round 1 (Quiz)</th>
+                        <th className="p-3 text-center">Round 2 (Debug)</th>
+                        <th className="p-3 text-center">Round 3 (Hunt)</th>
+                        <th className="p-3 text-center font-bold text-[#D60303]">Total Score</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-200 dark:divide-[#27272a] text-zinc-800 dark:text-zinc-200">
+                      {leaderboard.map((u, rankIdx) => (
+                        <tr key={u.id || rankIdx} className="hover:bg-zinc-50 dark:hover:bg-zinc-900/40 transition-colors">
+                          <td className="p-3 text-center font-mono font-bold">
+                            {rankIdx === 0 ? '🥇 1' : rankIdx === 1 ? '🥈 2' : rankIdx === 2 ? '🥉 3' : `#${rankIdx + 1}`}
+                          </td>
+                          <td className="p-3 font-mono font-bold text-[#D60303]">{u.id}</td>
+                          <td className="p-3 font-semibold">{u.name}</td>
+                          <td className="p-3 text-zinc-600 dark:text-zinc-400">{u.college}</td>
+                          <td className="p-3 text-center font-mono">{u.round1Score || 0}</td>
+                          <td className="p-3 text-center font-mono">{u.round2Score || 0}</td>
+                          <td className="p-3 text-center font-mono">{u.round3Score || 0}</td>
+                          <td className="p-3 text-center font-mono font-bold text-[#D60303]">{u.totalScore || 0} pts</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
         </main>

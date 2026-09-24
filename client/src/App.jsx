@@ -53,7 +53,7 @@ function GlobalSecurityWrapper({ children }) {
 }
 
 function MainContent() {
-  const { currentScreen } = useApp();
+  const { currentScreen, currentUser } = useApp();
 
   const renderScreen = () => {
     switch (currentScreen) {
@@ -64,19 +64,38 @@ function MainContent() {
       case 'login':
         return <LoginPage />;
       case 'dashboard':
+        if (currentUser?.role === 'COORDINATOR') return <CoordinatorPortal />;
+        if (currentUser?.role === 'ADMIN') return <AdminPortal />;
         return <Dashboard />;
       case 'round1':
+        if (currentUser?.role === 'COORDINATOR') return <CoordinatorPortal />;
+        if (currentUser?.role === 'ADMIN') return <AdminPortal />;
         return <Round1Quiz />;
       case 'round2':
+        if (currentUser?.role === 'COORDINATOR') return <CoordinatorPortal />;
+        if (currentUser?.role === 'ADMIN') return <AdminPortal />;
         return <Round2Debug />;
       case 'round3':
+        if (currentUser?.role === 'COORDINATOR') return <CoordinatorPortal />;
+        if (currentUser?.role === 'ADMIN') return <AdminPortal />;
         return <Round3Hunt />;
       case 'admin':
+        if (currentUser?.role === 'COORDINATOR') return <CoordinatorPortal />;
+        if (currentUser?.role === 'PARTICIPANT') return <Dashboard />;
         return <AdminPortal />;
       case 'coordinator':
+        if (currentUser?.role === 'PARTICIPANT') return <Dashboard />;
         return <CoordinatorPortal />;
-      default:
+      case 'rules':
+      case 'announcements':
+      case 'profile':
+      case 'support':
         return <Dashboard />;
+      default:
+        if (currentUser?.role === 'ADMIN') return <AdminPortal />;
+        if (currentUser?.role === 'COORDINATOR') return <CoordinatorPortal />;
+        if (currentUser?.role === 'PARTICIPANT') return <Dashboard />;
+        return <LandingPage />;
     }
   };
 
