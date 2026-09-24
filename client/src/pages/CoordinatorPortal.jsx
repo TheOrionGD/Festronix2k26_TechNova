@@ -58,6 +58,7 @@ export default function CoordinatorPortal() {
   const [participantsList, setParticipantsList] = useState([]);
   const [isCreatingPart, setIsCreatingPart] = useState(false);
   const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
+  const [bulkJsonInput, setBulkJsonInput] = useState('');
   const [partName, setPartName] = useState('');
   const [partEmail, setPartEmail] = useState('');
   const [partCollege, setPartCollege] = useState('K. Ramakrishnan College of Technology');
