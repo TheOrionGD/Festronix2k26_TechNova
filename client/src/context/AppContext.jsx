@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { API_BASE } from '../config';
+import { io } from 'socket.io-client';
+import { BACKEND_URL, API_BASE } from '../config';
 import { AppContext } from './AppContextObject';
 
 export { AppContext };
@@ -209,6 +210,53 @@ export const AppProvider = ({ children }) => {
       fetchDebugProblems();
       fetchTechClues();
     });
+
+    // Real-Time WebSocket Connection
+    let socket = null;
+    try {
+      socket = io(BACKEND_URL, { transports: ['websocket', 'polling'] });
+
+      socket.on('verification:updated', (data) => {
+        if (data && data.problemId) {
+          setDebugSubmissions(prev => ({
+            ...prev,
+            [data.problemId]: {
+              ...prev[data.problemId],
+              status: 'VERIFIED',
+              verifiedBy: data.verifiedBy,
+              marks: data.marks
+            }
+          }));
+          fetchLeaderboard();
+        }
+      });
+
+      socket.on('announcement:added', (ann) => {
+        if (ann) {
+          setAnnouncements(prev => [ann, ...prev.filter(a => a.id !== ann.id)]);
+          setNotifications(prev => [
+            {
+              id: Date.now(),
+              title: `📢 ${ann.title}`,
+              message: ann.message,
+              time: 'Just now',
+              read: false
+            },
+            ...prev
+          ]);
+        }
+      });
+
+      socket.on('event:state_changed', (state) => {
+        if (state) setEventState(state);
+      });
+    } catch (e) {
+      console.error('Socket.io connection error:', e);
+    }
+
+    return () => {
+      if (socket) socket.disconnect();
+    };
   }, []);
 
   // Tab switch & Blur monitoring logger

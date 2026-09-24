@@ -121,16 +121,16 @@ export default function CoordinatorModal() {
         {/* Modal Body */}
         {isSuccess ? (
           <div className="p-8 text-center space-y-3 animate-slide-up">
-            <div className="w-16 h-16 bg-[#D60303]/20 text-[#D60303] rounded-full flex items-center justify-center mx-auto animate-bounce border border-red-500">
-              <Award className="w-8 h-8 text-[#D60303]" />
+            <div className="w-16 h-16 bg-emerald-500/20 text-emerald-500 rounded-full flex items-center justify-center mx-auto animate-bounce border border-emerald-500">
+              <Award className="w-8 h-8 text-emerald-500" />
             </div>
-            <h3 className="text-lg font-bold text-[#D60303] font-mono">Solution Verified & Locked!</h3>
+            <h3 className="text-lg font-bold text-emerald-600 dark:text-emerald-400 font-mono">Solution Verified & Locked!</h3>
             <p className="text-xs text-zinc-600 dark:text-[#a1a1aa] font-medium">
-              {marks} Marks awarded by {coordId} for Problem {pendingVerificationProblemId || 1}.
+              {marks} Marks awarded by {coordId} for Problem #{pendingVerificationProblemId || 1}.
             </p>
           </div>
         ) : (
-          <form onSubmit={handleVerify} className="p-6 space-y-5">
+          <form onSubmit={handleVerify} className="p-6 space-y-4">
             {errorMsg && (
               <div className="p-3 bg-red-50 dark:bg-[#991B1B]/20 border border-red-500 rounded-xl text-red-700 dark:text-red-400 text-xs flex items-center gap-2 font-semibold animate-slide-up">
                 <AlertCircle className="w-4 h-4 shrink-0 text-[#D60303]" />
@@ -138,17 +138,30 @@ export default function CoordinatorModal() {
               </div>
             )}
 
-            <div className="p-3 bg-[#F8F7F4] dark:bg-[#09090b] rounded-xl border border-red-500/50 text-xs space-y-2">
+            {/* Coordinator On-Desk Banner */}
+            <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-500/40 rounded-xl text-xs space-y-1">
+              <div className="flex items-center gap-2 font-mono font-bold text-amber-700 dark:text-amber-400">
+                <ShieldCheck className="w-4 h-4 text-amber-600" />
+                <span>Physical Terminal Inspection Required</span>
+              </div>
+              <p className="text-[11px] text-zinc-600 dark:text-zinc-300">
+                Lab Coordinator: Please inspect the running code on this terminal, tick off the 4 verification items, and enter your Coordinator ID & 4-digit PIN to lock marks.
+              </p>
+            </div>
+
+            {/* Terminal & Problem Context */}
+            <div className="p-3 bg-[#F8F7F4] dark:bg-[#09090b] rounded-xl border border-zinc-200 dark:border-[#27272a] text-xs grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-[11px] font-bold text-zinc-600 dark:text-[#a1a1aa] mb-1 font-mono">Target Participant ID</label>
-                <input
-                  type="text"
-                  value={participantIdInput}
-                  onChange={(e) => setParticipantIdInput(e.target.value)}
-                  className="w-full px-3 py-1.5 bg-white dark:bg-[#141417] border border-red-500/50 rounded-lg text-xs text-zinc-900 dark:text-white font-mono focus:border-[#D60303] focus:outline-none transition-colors"
-                  placeholder="e.g. TN2026-001"
-                  required
-                />
+                <label className="block text-[11px] font-bold text-zinc-500 dark:text-[#a1a1aa] mb-0.5 font-mono">Participant ID</label>
+                <span className="font-mono font-bold text-zinc-900 dark:text-white text-xs block">
+                  {participantIdInput || currentUser?.id || 'TN2026'}
+                </span>
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-zinc-500 dark:text-[#a1a1aa] mb-0.5 font-mono">Verifying Question</label>
+                <span className="font-mono font-bold text-[#D60303] text-xs block">
+                  Problem #{pendingVerificationProblemId || 1}
+                </span>
               </div>
             </div>
 

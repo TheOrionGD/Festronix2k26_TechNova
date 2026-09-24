@@ -15,7 +15,14 @@ import {
 } from 'lucide-react';
 
 export default function Round2Debug() {
-  const { currentUser, setIsCoordinatorModalOpen, setPendingVerificationProblemId, isOffline, leaderboard } = useApp();
+  const { 
+    currentUser, 
+    setIsCoordinatorModalOpen, 
+    setPendingVerificationProblemId, 
+    debugSubmissions,
+    isOffline, 
+    leaderboard 
+  } = useApp();
 
   const [problems, setProblems] = useState([]);
   const [currentProbIdx, setCurrentProbIdx] = useState(0);
@@ -24,6 +31,16 @@ export default function Round2Debug() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Sync real-time verification status from AppContext
+  useEffect(() => {
+    if (debugSubmissions && Object.keys(debugSubmissions).length > 0) {
+      setSubmissions(prev => ({
+        ...prev,
+        ...debugSubmissions
+      }));
+    }
+  }, [debugSubmissions]);
 
   useEffect(() => {
     const initDebug = async () => {
