@@ -11,9 +11,9 @@ export default function CoordinatorModal() {
     currentUser
   } = useApp();
 
-  const [coordId, setCoordId] = useState(currentUser?.id);
+  const [coordId, setCoordId] = useState(currentUser?.role === 'COORDINATOR' ? (currentUser?.id || '') : '');
   const [pin, setPin] = useState('');
-  const [participantIdInput, setParticipantIdInput] = useState(currentUser?.id);
+  const [participantIdInput, setParticipantIdInput] = useState(currentUser?.id || '');
   const [checklist, setChecklist] = useState({
     codeChecked: false,
     errorCorrected: false,
@@ -24,6 +24,27 @@ export default function CoordinatorModal() {
   const [errorMsg, setErrorMsg] = useState('');
   const [isSuccess, setIsSuccess] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Synchronize and reset modal fields whenever modal opens
+  useEffect(() => {
+    if (isCoordinatorModalOpen) {
+      if (currentUser?.role === 'COORDINATOR') {
+        setCoordId(currentUser?.id || '');
+      } else {
+        setCoordId('');
+        setParticipantIdInput(currentUser?.id || '');
+      }
+      setPin('');
+      setErrorMsg('');
+      setIsSuccess(false);
+      setChecklist({
+        codeChecked: false,
+        errorCorrected: false,
+        localExecution: false,
+        outputVerified: false
+      });
+    }
+  }, [isCoordinatorModalOpen, currentUser]);
 
   // Close modal on Escape key press
   useEffect(() => {

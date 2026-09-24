@@ -838,8 +838,6 @@ export default function CoordinatorPortal() {
           )}
         </main>
       </div>
-
-      <CoordinatorModal />
     </div>
   );
 }

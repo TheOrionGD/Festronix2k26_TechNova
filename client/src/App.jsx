@@ -11,6 +11,7 @@ import Round2Debug from './pages/Round2Debug';
 import Round3Hunt from './pages/Round3Hunt';
 import AdminPortal from './pages/AdminPortal';
 import CoordinatorPortal from './pages/CoordinatorPortal';
+import CoordinatorModal from './components/CoordinatorModal';
 
 function GlobalSecurityWrapper({ children }) {
   useEffect(() => {
@@ -92,6 +93,7 @@ export default function App() {
       <GlobalSecurityWrapper>
         <CinematicParticleCanvas />
         <MainContent />
+        <CoordinatorModal />
       </GlobalSecurityWrapper>
     </AppProvider>
   );

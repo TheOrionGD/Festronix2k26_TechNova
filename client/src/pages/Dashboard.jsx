@@ -674,8 +674,6 @@ export default function Dashboard() {
           {renderWorkspaceContent()}
         </main>
       </div>
-
-      <CoordinatorModal />
     </div>
   );
 }
