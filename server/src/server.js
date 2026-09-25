@@ -2075,6 +2075,50 @@ app.post('/api/quiz/answer', async (req, res) => {
   }
 });
 
+// Offline synchronization: syncs batch of locally cached answers when network re-establishes
+app.post('/api/quiz/sync-answers', async (req, res) => {
+  const { participantId, userAnswers } = req.body;
+  if (!participantId || !userAnswers || typeof userAnswers !== 'object') {
+    return res.status(400).json({ success: false, message: 'participantId and userAnswers object required.' });
+  }
+
+  try {
+    let attempt = null;
+    let savedCount = 0;
+    if (isDbConnected) {
+      attempt = await QuizAttempt.findOne({ participantId, status: 'ACTIVE' });
+      if (attempt) {
+        Object.entries(userAnswers).forEach(([qId, optIdx]) => {
+          if (optIdx !== undefined && optIdx !== null) {
+            attempt.userAnswers.set(String(qId), parseInt(optIdx));
+            savedCount++;
+          }
+        });
+        await attempt.save();
+      }
+    } else {
+      attempt = memoryStore.quizAttempts[participantId];
+      if (attempt && attempt.status === 'ACTIVE') {
+        attempt.userAnswers = attempt.userAnswers || {};
+        Object.entries(userAnswers).forEach(([qId, optIdx]) => {
+          if (optIdx !== undefined && optIdx !== null) {
+            attempt.userAnswers[String(qId)] = parseInt(optIdx);
+            savedCount++;
+          }
+        });
+      }
+    }
+
+    res.json({ 
+      success: true, 
+      syncedAnswersCount: savedCount, 
+      message: `Successfully synchronized ${savedCount} offline answer(s) to database.` 
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 app.post('/api/quiz/submit', async (req, res) => {
   const { participantId, userAnswers } = req.body;
 
@@ -2591,23 +2635,35 @@ app.get('/api/coordinator/submissions', async (req, res) => {
 app.post('/api/coordinator/verify', async (req, res) => {
   const { problemId, coordinatorId, pin, marks, participantId, rubricBreakdown } = req.body;
 
+  if (!participantId) {
+    return res.status(400).json({ success: false, message: 'Participant ID is required for verification.' });
+  }
+
+  if (!coordinatorId) {
+    return res.status(400).json({ success: false, message: 'Coordinator ID is required.' });
+  }
+
   try {
     let coordinator = null;
     if (isDbConnected) {
-      coordinator = await User.findOne({ id: coordinatorId, role: 'COORDINATOR' });
+      coordinator = await User.findOne({ id: coordinatorId, role: { $in: ['COORDINATOR', 'ADMIN'] } });
     } else {
-      coordinator = memoryStore.users.find(u => u.id === coordinatorId && u.role === 'COORDINATOR');
+      coordinator = memoryStore.users.find(u => u.id === coordinatorId && (u.role === 'COORDINATOR' || u.role === 'ADMIN'));
     }
 
     if (!coordinator) {
-      return res.status(401).json({ success: false, message: 'Invalid Coordinator ID.' });
+      return res.status(401).json({ success: false, message: `Coordinator or Admin ID "${coordinatorId}" not found.` });
     }
 
-    if (coordinator && coordinator.pin && pin && coordinator.pin !== pin) {
-      return res.status(401).json({ success: false, message: 'Invalid Coordinator Authorization PIN.' });
+    // Authorization PIN check: If coordinator has a PIN configured, verify it. Admins can authorize with any valid PIN.
+    if (coordinator.role === 'COORDINATOR' && coordinator.pin && coordinator.pin.trim() !== '') {
+      if (!pin || String(pin).trim() !== String(coordinator.pin).trim()) {
+        return res.status(401).json({ success: false, message: 'Invalid Coordinator Authorization PIN.' });
+      }
     }
 
     const numericMarks = Number(parseFloat(marks ?? 0).toFixed(1));
+    const parsedProblemId = parseInt(problemId) || 1;
 
     const update = {
       status: 'VERIFIED',
@@ -2619,18 +2675,18 @@ app.post('/api/coordinator/verify', async (req, res) => {
 
     if (isDbConnected) {
       await Submission.findOneAndUpdate(
-        { participantId, problemId: parseInt(problemId) },
-        update,
+        { participantId, problemId: parsedProblemId },
+        { ...update, participantId, problemId: parsedProblemId },
         { upsert: true, new: true }
       );
     } else {
-      const idx = memoryStore.submissions.findIndex(s => s.participantId === participantId && s.problemId === parseInt(problemId));
+      const idx = memoryStore.submissions.findIndex(s => s.participantId === participantId && s.problemId === parsedProblemId);
       if (idx >= 0) memoryStore.submissions[idx] = { ...memoryStore.submissions[idx], ...update };
-      else memoryStore.submissions.push({ participantId, problemId: parseInt(problemId), ...update });
+      else memoryStore.submissions.push({ participantId, problemId: parsedProblemId, ...update });
     }
 
-    await createAuditLog(coordinatorId, 'COORDINATOR', 'DEBUG_SUBMISSION_VERIFIED', problemId, { participantId, marks: numericMarks, rubricBreakdown });
-    io.emit('verification:updated', { participantId, problemId, ...update });
+    await createAuditLog(coordinatorId, coordinator.role, 'DEBUG_SUBMISSION_VERIFIED', String(parsedProblemId), { participantId, marks: numericMarks, rubricBreakdown });
+    io.emit('verification:updated', { participantId, problemId: parsedProblemId, ...update });
 
     // Live Calculation Update
     try {
@@ -2640,7 +2696,11 @@ app.post('/api/coordinator/verify', async (req, res) => {
       console.warn('Leaderboard recomputation error on coordinator verify:', e.message);
     }
 
-    res.json({ success: true, message: 'Verification recorded successfully.', update });
+    res.json({ 
+      success: true, 
+      message: `Score of ${numericMarks} marks authorized and locked for Participant ${participantId} (Problem #${parsedProblemId}).`, 
+      update 
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

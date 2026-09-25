@@ -81,18 +81,19 @@ export const AppProvider = ({ children }) => {
         const diff = Math.max(0, Math.floor((new Date(eventState.roundEndsAt).getTime() - Date.now()) / 1000));
         setRoundTimeLeft(diff);
       } else if (eventState?.roundStartedAt) {
-        let dur = 20;
-        if (status === 'ROUND_2_RUNNING') dur = eventState?.round2DurationMinutes || 45;
-        else if (status === 'ROUND_3_RUNNING') dur = eventState?.round3DurationMinutes || 40;
-        else dur = eventState?.round1DurationMinutes || 20;
+        let dur = 10;
+        if (status === 'ROUND_2_RUNNING') dur = eventState?.round2DurationMinutes || 15;
+        else if (status === 'ROUND_3_RUNNING') dur = eventState?.round3DurationMinutes || 15;
+        else dur = eventState?.round1DurationMinutes || 10;
 
         const end = new Date(eventState.roundStartedAt).getTime() + dur * 60 * 1000;
         const diff = Math.max(0, Math.floor((end - Date.now()) / 1000));
         setRoundTimeLeft(diff);
       } else {
-        let defaultSec = 20 * 60;
-        if (status === 'ROUND_2_RUNNING') defaultSec = 45 * 60;
-        else if (status === 'ROUND_3_RUNNING') defaultSec = 40 * 60;
+        let defaultSec = 10 * 60;
+        if (status === 'ROUND_2_RUNNING') defaultSec = (eventState?.round2DurationMinutes || 15) * 60;
+        else if (status === 'ROUND_3_RUNNING') defaultSec = (eventState?.round3DurationMinutes || 15) * 60;
+        else defaultSec = (eventState?.round1DurationMinutes || 10) * 60;
         setRoundTimeLeft(defaultSec);
       }
     };
@@ -353,6 +354,7 @@ export const AppProvider = ({ children }) => {
 
   // Coordinator Verification Modal State
   const [pendingVerificationProblemId, setPendingVerificationProblemId] = useState(null);
+  const [pendingVerificationParticipantId, setPendingVerificationParticipantId] = useState(null);
   const [isCoordinatorModalOpen, setIsCoordinatorModalOpen] = useState(false);
 
   // Notification Drawer & Notifications List State
@@ -1105,6 +1107,8 @@ export const AppProvider = ({ children }) => {
       setIsCoordinatorModalOpen,
       pendingVerificationProblemId,
       setPendingVerificationProblemId,
+      pendingVerificationParticipantId,
+      setPendingVerificationParticipantId,
       fetchEventState,
       fetchLeaderboard,
       fetchAnnouncements,

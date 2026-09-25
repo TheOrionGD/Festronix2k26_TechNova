@@ -822,7 +822,7 @@ export default function Dashboard() {
                       <span className="text-[10px] text-zinc-400 font-mono block uppercase">Remaining Time</span>
                       <span className="font-bold text-[#D60303] text-sm flex items-center gap-1">
                         <Clock className="w-3.5 h-3.5 animate-pulse" />
-                        <span>{roundTimeLeft > 0 ? formatRoundTime(roundTimeLeft) : '20:00'}</span>
+                        <span>{roundTimeLeft > 0 ? formatRoundTime(roundTimeLeft) : '10:00'}</span>
                       </span>
                     </div>
                     <div className="p-3 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800">
@@ -909,7 +909,7 @@ export default function Dashboard() {
 
                   <span className="px-3 py-1 rounded-full bg-[#D60303] text-white text-[11px] font-mono font-bold tracking-wider uppercase flex items-center gap-1.5 shadow-xs">
                     <Clock className="w-3.5 h-3.5 animate-pulse" />
-                    <span>R3 LIVE: {roundTimeLeft > 0 ? formatRoundTime(roundTimeLeft) : '40:00'}</span>
+                    <span>R3 LIVE: {roundTimeLeft > 0 ? formatRoundTime(roundTimeLeft) : '15:00'}</span>
                   </span>
                 </div>
 

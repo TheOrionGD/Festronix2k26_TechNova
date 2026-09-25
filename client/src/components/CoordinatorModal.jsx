@@ -6,13 +6,17 @@ function CoordinatorModalContent() {
   const { 
     setIsCoordinatorModalOpen, 
     pendingVerificationProblemId, 
+    pendingVerificationParticipantId,
     verifyDebugSubmission,
     currentUser
   } = useApp();
 
-  const [coordId, setCoordId] = useState(currentUser?.role === 'COORDINATOR' ? (currentUser?.id || '') : '');
-  const [pin, setPin] = useState('');
-  const participantIdInput = currentUser?.id || '';
+  const isCoordOrAdmin = currentUser?.role === 'COORDINATOR' || currentUser?.role === 'ADMIN';
+  const [coordId, setCoordId] = useState(isCoordOrAdmin ? (currentUser?.id || '') : '');
+  const [pin, setPin] = useState(currentUser?.pin || '');
+  const [participantIdInput, setParticipantIdInput] = useState(
+    pendingVerificationParticipantId || (currentUser?.role === 'PARTICIPANT' ? currentUser?.id : '') || ''
+  );
   
   // Checklist
   const [checklist, setChecklist] = useState({
@@ -55,6 +59,11 @@ function CoordinatorModalContent() {
       return;
     }
 
+    if (!participantIdInput.trim()) {
+      setErrorMsg('Participant ID is required to authorize the evaluated score.');
+      return;
+    }
+
     if (!coordId.trim() || !pin.trim()) {
       setErrorMsg('Coordinator ID and authorization PIN are required.');
       return;
@@ -66,7 +75,7 @@ function CoordinatorModalContent() {
       coordId, 
       pin, 
       calculatedMarks, 
-      participantIdInput,
+      participantIdInput.trim(),
       {
         logicMarks,
         outputMarks,
@@ -78,6 +87,9 @@ function CoordinatorModalContent() {
 
     if (result.success) {
       setIsSuccess(true);
+      window.dispatchEvent(new CustomEvent('verification:updated', { 
+        detail: { problemId: pendingVerificationProblemId || 1, participantId: participantIdInput.trim(), marks: calculatedMarks } 
+      }));
       setTimeout(() => {
         setIsSuccess(false);
         setIsCoordinatorModalOpen(false);
@@ -401,14 +413,26 @@ function CoordinatorModalContent() {
             </div>
 
             {/* Coordinator Authorization Inputs */}
-            <div className="grid grid-cols-2 gap-3 pt-1">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+              <div>
+                <label className="block text-[11px] font-bold text-zinc-600 dark:text-[#a1a1aa] mb-1 font-mono">Participant ID</label>
+                <input
+                  type="text"
+                  value={participantIdInput}
+                  onChange={(e) => setParticipantIdInput(e.target.value)}
+                  className="w-full px-3 py-2 bg-[#F8F7F4] dark:bg-[#09090b] border border-red-500/50 rounded-xl text-xs text-[#D60303] font-bold focus:border-[#D60303] focus:outline-none font-mono transition-colors"
+                  placeholder="TN2026-xxx"
+                  required
+                />
+              </div>
+
               <div>
                 <label className="block text-[11px] font-bold text-zinc-600 dark:text-[#a1a1aa] mb-1 font-mono">Coordinator ID</label>
                 <input
                   type="text"
                   value={coordId}
                   onChange={(e) => setCoordId(e.target.value)}
-                  className="w-full px-3 py-2 bg-[#F8F7F4] dark:bg-[#09090b] border border-red-500/50 rounded-xl text-xs text-zinc-900 dark:text-white focus:border-[#D60303] focus:outline-none font-mono transition-colors"
+                  className="w-full px-3 py-2 bg-[#F8F7F4] dark:bg-[#09090b] border border-red-500/50 rounded-xl text-xs text-zinc-900 dark:text-white focus:border-[#D60303] focus:outline-none font-mono transition-colors font-semibold"
                   placeholder="COORD-ID"
                   required
                 />
@@ -443,7 +467,7 @@ function CoordinatorModalContent() {
 }
 
 export default function CoordinatorModal() {
-  const { isCoordinatorModalOpen } = useApp();
+  const { isCoordinatorModalOpen, pendingVerificationProblemId, pendingVerificationParticipantId } = useApp();
   if (!isCoordinatorModalOpen) return null;
-  return <CoordinatorModalContent />;
+  return <CoordinatorModalContent key={`${pendingVerificationProblemId || 1}-${pendingVerificationParticipantId || 'default'}`} />;
 }

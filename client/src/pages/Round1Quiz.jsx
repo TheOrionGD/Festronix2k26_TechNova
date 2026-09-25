@@ -61,7 +61,7 @@ export default function Round1Quiz() {
   const [attemptId, setAttemptId] = useState(null);
   const [currentIdx, setCurrentIdx] = useState(0);
   const [userAnswers, setUserAnswers] = useState({});
-  const [timeLeft, setTimeLeft] = useState(20 * 60);
+  const [timeLeft, setTimeLeft] = useState((eventState?.round1DurationMinutes || 10) * 60);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [scoreResult, setScoreResult] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -71,6 +71,7 @@ export default function Round1Quiz() {
   // gradingStatus: 'graded' | 'non_graded' | null (null = not yet known)
   const [gradingStatus, setGradingStatus] = useState(null);
   const [showNonGradedInfo, setShowNonGradedInfo] = useState(false);
+  const [offlineSyncMessage, setOfflineSyncMessage] = useState(null);
 
   const [showOfflineReconnectionSection, setShowOfflineReconnectionSection] = useState(false);
 
@@ -92,10 +93,40 @@ export default function Round1Quiz() {
 
   const { flaggedQuestions, toggleFlagQuestion, markRoundCompletedByUser } = useApp();
 
-  // Initialize or Restore Quiz Attempt
+  // Initialize or Restore Quiz Attempt (with robust offline caching)
   useEffect(() => {
     const initQuiz = async () => {
       const pid = currentUser?.id;
+      if (!pid) {
+        setIsLoading(false);
+        return;
+      }
+
+      // Check local cache first so offline participants never lose questions
+      const cachedQuestions = localStorage.getItem(`technova_r1_questions_${pid}`);
+      const cachedAnswers = localStorage.getItem(`technova_r1_answers_${pid}`);
+      const cachedAttemptId = localStorage.getItem(`technova_r1_attemptId_${pid}`);
+      const cachedGrading = localStorage.getItem(`technova_r1_gradingStatus_${pid}`);
+
+      if (cachedQuestions) {
+        try {
+          const parsedQ = JSON.parse(cachedQuestions);
+          if (Array.isArray(parsedQ) && parsedQ.length > 0) {
+            setQuestions(parsedQ);
+          }
+        } catch { /* ignore */ }
+      }
+      if (cachedAnswers) {
+        try {
+          const parsedAns = JSON.parse(cachedAnswers);
+          if (parsedAns && typeof parsedAns === 'object') {
+            setUserAnswers(parsedAns);
+          }
+        } catch { /* ignore */ }
+      }
+      if (cachedAttemptId) setAttemptId(cachedAttemptId);
+      if (cachedGrading) setGradingStatus(cachedGrading);
+
       try {
         const checkRes = await fetch(`${API_BASE}/quiz/current?participantId=${pid}`);
         const checkData = await checkRes.json();
@@ -103,10 +134,23 @@ export default function Round1Quiz() {
         if (checkData.success && checkData.hasAttempt) {
           setAttemptId(checkData.attemptId);
           setQuestions(checkData.questions || []);
-          setUserAnswers(checkData.userAnswers || {});
-          // Capture grading status from server response
+
+          // Merge server userAnswers with any locally saved answers
+          let localAnswers = {};
+          if (cachedAnswers) {
+            try { localAnswers = JSON.parse(cachedAnswers) || {}; } catch {}
+          }
+          const mergedAnswers = { ...(checkData.userAnswers || {}), ...localAnswers };
+          setUserAnswers(mergedAnswers);
+
+          // Update local cache
+          localStorage.setItem(`technova_r1_questions_${pid}`, JSON.stringify(checkData.questions || []));
+          localStorage.setItem(`technova_r1_attemptId_${pid}`, checkData.attemptId);
+          localStorage.setItem(`technova_r1_answers_${pid}`, JSON.stringify(mergedAnswers));
+
           if (checkData.gradingStatus) {
             setGradingStatus(checkData.gradingStatus);
+            localStorage.setItem(`technova_r1_gradingStatus_${pid}`, checkData.gradingStatus);
             if (checkData.gradingStatus === 'non_graded') setShowNonGradedInfo(true);
           }
 
@@ -133,9 +177,15 @@ export default function Round1Quiz() {
           setAttemptId(startData.attemptId);
           setQuestions(startData.questions || []);
           setUserAnswers(startData.userAnswers || {});
-          // Capture grading status assigned by server
+
+          // Cache to localStorage
+          localStorage.setItem(`technova_r1_questions_${pid}`, JSON.stringify(startData.questions || []));
+          localStorage.setItem(`technova_r1_attemptId_${pid}`, startData.attemptId);
+          localStorage.setItem(`technova_r1_answers_${pid}`, JSON.stringify(startData.userAnswers || {}));
+
           if (startData.gradingStatus) {
             setGradingStatus(startData.gradingStatus);
+            localStorage.setItem(`technova_r1_gradingStatus_${pid}`, startData.gradingStatus);
             if (startData.gradingStatus === 'non_graded') setShowNonGradedInfo(true);
           }
           if (startData.endsAt) {
@@ -147,10 +197,14 @@ export default function Round1Quiz() {
         }
       } catch (err) {
         console.error('Init quiz error:', err);
-        setErrorMessage('Failed to connect to backend quiz engine.');
+        if (cachedQuestions) {
+          // If offline but questions are cached, keep user in the quiz!
+          setErrorMessage(null);
+        } else {
+          setErrorMessage('Failed to connect to backend quiz engine. Please check network.');
+        }
       } finally {
         setIsLoading(false);
-        // Refresh grading status in global context after quiz init
         if (pid) fetchGradingStatus(pid);
       }
     };
@@ -168,6 +222,19 @@ export default function Round1Quiz() {
     setIsOfflineReconnectionEligible(false);
     setShowOfflineReconnectionSection(false);
 
+    // Merge any locally stored answers to ensure 100% of responses are submitted
+    const pid = currentUser?.id;
+    let latestAnswers = { ...userAnswers };
+    if (pid) {
+      const cachedAnswersStr = localStorage.getItem(`technova_r1_answers_${pid}`);
+      if (cachedAnswersStr) {
+        try {
+          const parsed = JSON.parse(cachedAnswersStr);
+          latestAnswers = { ...latestAnswers, ...parsed };
+        } catch {}
+      }
+    }
+
     try {
       const res = await fetch(`${API_BASE}/quiz/submit`, {
         method: 'POST',
@@ -175,7 +242,7 @@ export default function Round1Quiz() {
         body: JSON.stringify({
           participantId: currentUser?.id,
           attemptId: attemptId,
-          userAnswers
+          userAnswers: latestAnswers
         })
       });
       const data = await res.json();
@@ -184,6 +251,7 @@ export default function Round1Quiz() {
         setIsSubmitted(true);
         if (markRoundCompletedByUser) markRoundCompletedByUser(1);
         fetchLeaderboard();
+        if (pid) localStorage.removeItem(`technova_r1_answers_${pid}`);
       } else {
         alert(data.message);
       }
@@ -229,6 +297,42 @@ export default function Round1Quiz() {
     }
   }, [eventState?.roundEndsAt, eventState?.status, isSubmitted, isLoading, handleSubmitQuiz]);
 
+  // Re-establishment of network: Automatically sync all locally stored answers to database
+  useEffect(() => {
+    if (isOffline || isSubmitted || !currentUser?.id) return;
+    const pid = currentUser.id;
+    const cachedAnswersStr = localStorage.getItem(`technova_r1_answers_${pid}`);
+    if (!cachedAnswersStr) return;
+
+    let localAnswers = null;
+    try {
+      localAnswers = JSON.parse(cachedAnswersStr);
+    } catch {
+      return;
+    }
+
+    if (localAnswers && Object.keys(localAnswers).length > 0) {
+      fetch(`${API_BASE}/quiz/sync-answers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          participantId: pid,
+          userAnswers: localAnswers
+        })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          setOfflineSyncMessage(`🟢 Network Restored: All ${data.syncedAnswersCount || Object.keys(localAnswers).length} locally saved answers successfully synchronized to database.`);
+          setTimeout(() => setOfflineSyncMessage(null), 5000);
+        }
+      })
+      .catch(err => {
+        console.warn('Sync offline answers error:', err);
+      });
+    }
+  }, [isOffline, isSubmitted, currentUser]);
+
   const currentQ = questions[currentIdx];
 
   const handleSelectOption = async (optIndex) => {
@@ -236,6 +340,12 @@ export default function Round1Quiz() {
     const qId = currentQ.questionId;
     const updatedAnswers = { ...userAnswers, [qId]: optIndex };
     setUserAnswers(updatedAnswers);
+
+    // Store in local storage immediately so selections are preserved offline
+    const pid = currentUser?.id;
+    if (pid) {
+      localStorage.setItem(`technova_r1_answers_${pid}`, JSON.stringify(updatedAnswers));
+    }
 
     // Auto-advance to next question smoothly after 250ms
     if (currentIdx < questions.length - 1) {
@@ -255,7 +365,7 @@ export default function Round1Quiz() {
         })
       });
     } catch (err) {
-      console.warn('Save answer error:', err);
+      console.warn('Save answer network error (safely stored offline):', err);
     }
   };
 
@@ -465,6 +575,12 @@ export default function Round1Quiz() {
             </div>
           ) : currentQ ? (
             <>
+              {offlineSyncMessage && (
+                <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-500/40 rounded-2xl flex items-center gap-2 text-xs font-bold text-emerald-700 dark:text-emerald-300 animate-slide-up shadow-sm mb-4">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-500" />
+                  <span>{offlineSyncMessage}</span>
+                </div>
+              )}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-6 animate-slide-up">
               {/* Question Box */}
               <div className="md:col-span-3 space-y-6">

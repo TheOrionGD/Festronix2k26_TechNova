@@ -42,6 +42,7 @@ export default function CoordinatorPortal() {
     currentUser, 
     setIsCoordinatorModalOpen, 
     setPendingVerificationProblemId, 
+    setPendingVerificationParticipantId,
     fetchLeaderboard,
     leaderboard,
     announcements,
@@ -384,10 +385,17 @@ export default function CoordinatorPortal() {
       fetchParticipants();
       fetchColleges();
     });
+
+    const handleVerificationUpdate = () => {
+      fetchCoordinatorQueue();
+    };
+    window.addEventListener('verification:updated', handleVerificationUpdate);
+    return () => window.removeEventListener('verification:updated', handleVerificationUpdate);
   }, []);
 
-  const handleVerifyClick = (problemId) => {
+  const handleVerifyClick = (problemId, participantId) => {
     setPendingVerificationProblemId(problemId);
+    setPendingVerificationParticipantId(participantId);
     setIsCoordinatorModalOpen(true);
   };
 
@@ -837,7 +845,7 @@ export default function CoordinatorPortal() {
                         {/* Action Button */}
                         <div className="flex justify-end pt-2">
                           <button
-                            onClick={() => handleVerifyClick(sub.problemId)}
+                            onClick={() => handleVerifyClick(sub.problemId, sub.participantId)}
                             className="px-6 py-2.5 rounded-xl bg-[#D60303] hover:bg-[#A30B1A] text-[#EFEEEA] font-bold text-xs shadow-md transition flex items-center gap-2 cursor-pointer btn-interactive"
                           >
                             <Award className="w-4 h-4 text-[#EFEEEA]" />
