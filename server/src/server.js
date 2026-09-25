@@ -709,12 +709,15 @@ app.post('/api/coordinator/participants/bulk', async (req, res) => {
 
 app.put('/api/admin/users/:id', async (req, res) => {
   const { id } = req.params;
-  const { name, email, password, pin, assignedRound, accountStatus, role } = req.body;
+  const { name, email, password, pin, assignedRound, accountStatus, role, college, department, year } = req.body;
 
   try {
     const updates = {};
     if (name) updates.name = name.trim();
     if (email) updates.email = email.toLowerCase().trim();
+    if (college !== undefined) updates.college = String(college).trim();
+    if (department !== undefined) updates.department = String(department).trim();
+    if (year !== undefined) updates.year = String(year).trim();
     if (pin !== undefined) updates.pin = String(pin).trim();
     if (assignedRound !== undefined) updates.assignedRound = String(assignedRound).trim();
     if (accountStatus) updates.accountStatus = accountStatus;
@@ -726,12 +729,18 @@ app.put('/api/admin/users/:id', async (req, res) => {
     let updatedUser = null;
     if (isDbConnected) {
       updatedUser = await User.findOneAndUpdate({ id }, updates, { new: true }).select('-password');
+      if (updates.college) {
+        await EventState.updateOne({}, { $addToSet: { colleges: updates.college } });
+      }
     } else {
       const idx = memoryStore.users.findIndex(u => u.id === id);
       if (idx >= 0) {
         memoryStore.users[idx] = { ...memoryStore.users[idx], ...updates };
         updatedUser = { ...memoryStore.users[idx] };
         delete updatedUser.password;
+      }
+      if (updates.college && !memoryStore.eventState.colleges.includes(updates.college)) {
+        memoryStore.eventState.colleges.push(updates.college);
       }
     }
 
@@ -745,6 +754,82 @@ app.put('/api/admin/users/:id', async (req, res) => {
       success: true,
       user: updatedUser,
       message: `User ${id} authentication record updated successfully.`
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Coordinator updates participant details (e.g. manually change/type college name)
+app.patch('/api/coordinator/participants/:id', async (req, res) => {
+  const { id } = req.params;
+  const { college, name, department, year } = req.body;
+  try {
+    const updates = {};
+    if (college !== undefined) updates.college = String(college).trim();
+    if (name !== undefined) updates.name = String(name).trim();
+    if (department !== undefined) updates.department = String(department).trim();
+    if (year !== undefined) updates.year = String(year).trim();
+
+    let updatedUser = null;
+    if (isDbConnected) {
+      updatedUser = await User.findOneAndUpdate({ id }, updates, { new: true }).select('-password');
+      if (updates.college) {
+        await EventState.updateOne({}, { $addToSet: { colleges: updates.college } });
+      }
+    } else {
+      const idx = memoryStore.users.findIndex(u => u.id === id);
+      if (idx >= 0) {
+        memoryStore.users[idx] = { ...memoryStore.users[idx], ...updates };
+        updatedUser = { ...memoryStore.users[idx] };
+        delete updatedUser.password;
+      }
+      if (updates.college && !memoryStore.eventState.colleges.includes(updates.college)) {
+        memoryStore.eventState.colleges.push(updates.college);
+      }
+    }
+
+    if (!updatedUser) {
+      return res.status(404).json({ success: false, message: `Participant ${id} not found.` });
+    }
+
+    res.json({
+      success: true,
+      user: updatedUser,
+      message: `Participant ${id} college updated to "${updatedUser.college}".`
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Coordinator bulk updates college for multiple/all participants
+app.post('/api/coordinator/participants/update-college-bulk', async (req, res) => {
+  const { participantIds, college } = req.body;
+  if (!college || !Array.isArray(participantIds)) {
+    return res.status(400).json({ success: false, message: 'participantIds array and college name required.' });
+  }
+  const cleanCollege = String(college).trim();
+  try {
+    if (isDbConnected) {
+      await User.updateMany(
+        { id: { $in: participantIds } },
+        { $set: { college: cleanCollege } }
+      );
+      await EventState.updateOne({}, { $addToSet: { colleges: cleanCollege } });
+    } else {
+      memoryStore.users.forEach(u => {
+        if (participantIds.includes(u.id)) {
+          u.college = cleanCollege;
+        }
+      });
+      if (!memoryStore.eventState.colleges.includes(cleanCollege)) {
+        memoryStore.eventState.colleges.push(cleanCollege);
+      }
+    }
+    res.json({
+      success: true,
+      message: `Successfully updated college to "${cleanCollege}" for ${participantIds.length} participant(s).`
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });

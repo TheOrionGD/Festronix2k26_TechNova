@@ -31,7 +31,10 @@ import {
   GitBranch,
   Sliders,
   Save,
-  AlertCircle
+  AlertCircle,
+  Edit3,
+  Check,
+  X
 } from 'lucide-react';
 
 export default function CoordinatorPortal() {
@@ -270,6 +273,14 @@ export default function CoordinatorPortal() {
   const [leaderboardFilter, setLeaderboardFilter] = useState('ALL'); // 'ALL' | 'R1' | 'R2' | 'R3'
   const [leaderboardSearch, setLeaderboardSearch] = useState('');
 
+  // College Manual Editing & Bulk Change State
+  const [editingParticipantCollegeId, setEditingParticipantCollegeId] = useState(null);
+  const [editingCollegeValue, setEditingCollegeValue] = useState('');
+  const [isSavingCollege, setIsSavingCollege] = useState(false);
+  const [isBatchCollegeOpen, setIsBatchCollegeOpen] = useState(false);
+  const [batchCollegeValue, setBatchCollegeValue] = useState('');
+  const [isBatchSaving, setIsBatchSaving] = useState(false);
+
   const displayedParticipants = filterMyTerminal
     ? participantsList.filter(p => p.assignedCoordinator === currentUser?.id || (currentUser?.assignedRound && p.assignedRound === currentUser?.assignedRound))
     : participantsList;
@@ -355,9 +366,6 @@ export default function CoordinatorPortal() {
     'SASTRA Deemed University',
     'Government College of Engineering'
   ]);
-  const [newCollegeInput, setNewCollegeInput] = useState('');
-  const [isAddingNewCollege, setIsAddingNewCollege] = useState(false);
-
   const fetchColleges = async () => {
     try {
       const res = await fetch(`${API_BASE}/colleges`);
@@ -367,27 +375,6 @@ export default function CoordinatorPortal() {
       }
     } catch (err) {
       console.error('Fetch colleges error:', err);
-    }
-  };
-
-  const handleAddNewCollege = async () => {
-    if (!newCollegeInput.trim()) return;
-    try {
-      const res = await fetch(`${API_BASE}/colleges`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newCollegeInput.trim() })
-      });
-      const data = await res.json();
-      if (data.success) {
-        await fetchColleges();
-        setPartCollege(newCollegeInput.trim());
-        setGenCollege(newCollegeInput.trim());
-        setNewCollegeInput('');
-        setIsAddingNewCollege(false);
-      }
-    } catch (err) {
-      console.error('Add new college error:', err);
     }
   };
 
@@ -499,6 +486,78 @@ export default function CoordinatorPortal() {
       }
     } catch (err) {
       alert('Invalid JSON syntax: ' + err.message);
+    }
+  };
+
+  const handleSaveParticipantCollege = async (participantId) => {
+    if (!editingCollegeValue.trim()) {
+      alert('College name cannot be empty.');
+      return;
+    }
+    const cleanCollege = editingCollegeValue.trim();
+    setIsSavingCollege(true);
+    try {
+      const res = await fetch(`${API_BASE}/coordinator/participants/${participantId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ college: cleanCollege })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setParticipantsList(prev => prev.map(p => p.id === participantId ? { ...p, college: cleanCollege } : p));
+        setEditingParticipantCollegeId(null);
+        await fetchLeaderboard();
+        await fetchColleges();
+      } else {
+        alert(data.message || 'Failed to update college.');
+      }
+    } catch (err) {
+      console.error('Update participant college error:', err);
+      alert('Network error updating college.');
+    } finally {
+      setIsSavingCollege(false);
+    }
+  };
+
+  const handleBatchUpdateCollege = async (e) => {
+    e.preventDefault();
+    if (!batchCollegeValue.trim()) {
+      alert('Please enter a valid college name.');
+      return;
+    }
+    const cleanCollege = batchCollegeValue.trim();
+    const targetIds = displayedParticipants.map(p => p.id);
+    if (targetIds.length === 0) {
+      alert('No participants in current view to update.');
+      return;
+    }
+    if (!window.confirm(`Are you sure you want to change the college name to "${cleanCollege}" for all ${targetIds.length} participant(s)?`)) {
+      return;
+    }
+
+    setIsBatchSaving(true);
+    try {
+      const res = await fetch(`${API_BASE}/coordinator/participants/update-college-bulk`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ participantIds: targetIds, college: cleanCollege })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setParticipantsList(prev => prev.map(p => targetIds.includes(p.id) ? { ...p, college: cleanCollege } : p));
+        setIsBatchCollegeOpen(false);
+        setBatchCollegeValue('');
+        await fetchLeaderboard();
+        await fetchColleges();
+        alert(data.message || 'College names updated successfully!');
+      } else {
+        alert(data.message || 'Failed to bulk update college.');
+      }
+    } catch (err) {
+      console.error('Bulk update college error:', err);
+      alert('Network error bulk updating college.');
+    } finally {
+      setIsBatchSaving(false);
     }
   };
 
@@ -896,43 +955,16 @@ export default function CoordinatorPortal() {
                     <div>
                       <div className="flex items-center justify-between mb-1">
                         <label className="font-bold text-[#595959]">College Name</label>
-                        <button
-                          type="button"
-                          onClick={() => setIsAddingNewCollege(!isAddingNewCollege)}
-                          className="text-[10px] font-bold text-[#D60303] hover:underline cursor-pointer"
-                        >
-                          {isAddingNewCollege ? 'Cancel' : '+ Add New'}
-                        </button>
+                        <span className="text-[10px] text-[#A30B1A] font-semibold">Type manually or select below</span>
                       </div>
-
-                      {isAddingNewCollege ? (
-                        <div className="flex gap-1">
-                          <input
-                            type="text"
-                            value={newCollegeInput}
-                            onChange={(e) => setNewCollegeInput(e.target.value)}
-                            placeholder="Type new college name..."
-                            className="w-full px-2 py-1.5 bg-[#EFEEEA] border border-[#A30B1A] rounded-xl outline-none text-xs"
-                          />
-                          <button
-                            type="button"
-                            onClick={handleAddNewCollege}
-                            className="px-2 py-1.5 bg-[#A30B1A] text-[#EFEEEA] font-bold rounded-xl text-[10px] cursor-pointer"
-                          >
-                            Save
-                          </button>
-                        </div>
-                      ) : (
-                        <select
-                          value={genCollege}
-                          onChange={(e) => setGenCollege(e.target.value)}
-                          className="w-full px-3 py-2 bg-[#EFEEEA] border border-[#595959] rounded-xl outline-none text-xs font-medium"
-                        >
-                          {collegesList.map((c, idx) => (
-                            <option key={idx} value={c}>{c}</option>
-                          ))}
-                        </select>
-                      )}
+                      <input
+                        type="text"
+                        list="coordinator-colleges-datalist"
+                        value={genCollege}
+                        onChange={(e) => setGenCollege(e.target.value)}
+                        placeholder="Type or select college name..."
+                        className="w-full px-3 py-2 bg-[#EFEEEA] border border-[#595959] rounded-xl outline-none text-xs font-medium focus:border-[#A30B1A]"
+                      />
                     </div>
                   </div>
 
@@ -1047,17 +1079,16 @@ export default function CoordinatorPortal() {
                     <div className="sm:col-span-2">
                       <div className="flex items-center justify-between mb-1">
                         <label className="font-bold text-[#595959]">College Name</label>
-                        <span className="text-[10px] text-[#595959]">Select from registered institutions</span>
+                        <span className="text-[10px] text-[#A30B1A] font-semibold">Type manually or select below</span>
                       </div>
-                      <select
+                      <input
+                        type="text"
+                        list="coordinator-colleges-datalist"
                         value={partCollege}
                         onChange={(e) => setPartCollege(e.target.value)}
-                        className="w-full px-3 py-2 bg-[#EFEEEA] border border-[#595959] rounded-xl outline-none text-xs font-medium"
-                      >
-                        {collegesList.map((c, idx) => (
-                          <option key={idx} value={c}>{c}</option>
-                        ))}
-                      </select>
+                        placeholder="Type or select college name..."
+                        className="w-full px-3 py-2 bg-[#EFEEEA] border border-[#595959] rounded-xl outline-none text-xs font-medium focus:border-[#A30B1A]"
+                      />
                     </div>
                   </div>
 
@@ -1107,10 +1138,31 @@ export default function CoordinatorPortal() {
                 </form>
               )}
 
-              {/* Participants Roster Table */}
-              <div className="flex justify-between items-center text-xs font-semibold pb-1">
-                <span className="text-[#595959]">Showing {displayedParticipants.length} of {participantsList.length} total participants</span>
+              {/* Datalist for manually typing or selecting registered colleges */}
+              <datalist id="coordinator-colleges-datalist">
+                {collegesList.map((c, idx) => (
+                  <option key={idx} value={c} />
+                ))}
+              </datalist>
+
+              {/* Participants Roster Table Toolbar */}
+              <div className="flex flex-wrap justify-between items-center gap-2 text-xs font-semibold pb-1">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-[#595959]">Showing {displayedParticipants.length} of {participantsList.length} total participants</span>
+                  {displayedParticipants.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setIsBatchCollegeOpen(!isBatchCollegeOpen)}
+                      className="px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 transition text-[11px] font-bold flex items-center gap-1 cursor-pointer"
+                      title="Quickly change college name for all displayed participants"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                      <span>{isBatchCollegeOpen ? 'Close Batch Edit' : `Change College for All (${displayedParticipants.length})`}</span>
+                    </button>
+                  )}
+                </div>
                 <button
+                  type="button"
                   onClick={() => setFilterMyTerminal(!filterMyTerminal)}
                   className={`px-3 py-1 rounded-lg border transition text-[11px] cursor-pointer ${filterMyTerminal
                       ? 'bg-[#A30B1A] text-[#EFEEEA] border-[#A30B1A] font-bold'
@@ -1121,6 +1173,36 @@ export default function CoordinatorPortal() {
                 </button>
               </div>
 
+              {/* Batch College Update Bar */}
+              {isBatchCollegeOpen && (
+                <form onSubmit={handleBatchUpdateCollege} className="p-3 bg-blue-50/80 border border-blue-200 rounded-xl flex flex-wrap items-center gap-2 text-xs animate-slide-up">
+                  <span className="font-bold text-blue-900">Change College for All Displayed Participants:</span>
+                  <input
+                    type="text"
+                    list="coordinator-colleges-datalist"
+                    value={batchCollegeValue}
+                    onChange={(e) => setBatchCollegeValue(e.target.value)}
+                    placeholder="Type or select new college name for all..."
+                    className="flex-1 min-w-[240px] px-3 py-1.5 bg-white border border-blue-300 rounded-lg outline-none text-xs font-medium"
+                    autoFocus
+                  />
+                  <button
+                    type="submit"
+                    disabled={isBatchSaving}
+                    className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs cursor-pointer shadow-xs"
+                  >
+                    {isBatchSaving ? 'Updating...' : `Apply to ${displayedParticipants.length} Participants`}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsBatchCollegeOpen(false)}
+                    className="px-3 py-1.5 bg-zinc-200 hover:bg-zinc-300 text-zinc-700 font-bold rounded-lg text-xs cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </form>
+              )}
+
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
                   <thead className="bg-[#595959] text-[#EFEEEA] font-mono">
@@ -1128,7 +1210,12 @@ export default function CoordinatorPortal() {
                       <th className="p-3">Participant ID</th>
                       <th className="p-3">Full Name</th>
                       <th className="p-3">Email Address</th>
-                      <th className="p-3">College Name</th>
+                      <th className="p-3">
+                        <div className="flex items-center gap-1.5">
+                          <span>College Name</span>
+                          <span className="text-[10px] font-normal text-amber-200 font-sans">(Editable)</span>
+                        </div>
+                      </th>
                       <th className="p-3">Assigned Lab Terminal</th>
                       <th className="p-3">Dept & Year</th>
                       <th className="p-3 text-center">Default Password</th>
@@ -1146,7 +1233,59 @@ export default function CoordinatorPortal() {
                           <td className="p-3 font-mono font-bold text-[#D60303]">{p.id}</td>
                           <td className="p-3 font-semibold">{p.name}</td>
                           <td className="p-3 text-[#595959]/80">{p.email}</td>
-                          <td className="p-3 text-[#595959] font-medium text-[11px]">{p.college}</td>
+                          <td className="p-3 text-[#595959] font-medium text-[11px]">
+                            {editingParticipantCollegeId === p.id ? (
+                              <div className="flex items-center gap-1.5 min-w-[220px]">
+                                <input
+                                  type="text"
+                                  list="coordinator-colleges-datalist"
+                                  autoFocus
+                                  value={editingCollegeValue}
+                                  onChange={(e) => setEditingCollegeValue(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handleSaveParticipantCollege(p.id);
+                                    if (e.key === 'Escape') setEditingParticipantCollegeId(null);
+                                  }}
+                                  placeholder="Type college name..."
+                                  className="flex-1 px-2.5 py-1 text-xs bg-white border border-[#A30B1A] rounded-lg outline-none font-medium text-zinc-900 shadow-inner"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveParticipantCollege(p.id)}
+                                  disabled={isSavingCollege}
+                                  className="p-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white transition cursor-pointer"
+                                  title="Save College Name"
+                                >
+                                  <Check className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingParticipantCollegeId(null)}
+                                  className="p-1 rounded bg-zinc-200 hover:bg-zinc-300 text-zinc-700 transition cursor-pointer"
+                                  title="Cancel"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-between gap-1 group/col">
+                                <span className="truncate max-w-[200px]" title={p.college || 'No college specified'}>
+                                  {p.college || <span className="italic text-zinc-400">Not specified</span>}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingParticipantCollegeId(p.id);
+                                    setEditingCollegeValue(p.college || '');
+                                  }}
+                                  className="p-1 rounded opacity-70 hover:opacity-100 hover:bg-zinc-200 text-zinc-500 hover:text-[#A30B1A] transition cursor-pointer"
+                                  title="Click to change or type College Name manually"
+                                >
+                                  <Edit3 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            )}
+                          </td>
                           <td className="p-3 font-mono text-[11px]">
                             <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 font-bold">
                               {p.assignedRound}
@@ -1155,13 +1294,27 @@ export default function CoordinatorPortal() {
                           <td className="p-3 font-mono text-[11px]">{p.department} ({p.year})</td>
                           <td className="p-3 text-center font-mono font-bold text-[#A30B1A]">Same as ID ({p.id})</td>
                           <td className="p-3 text-center">
-                            <button
-                              onClick={() => handleDeleteParticipant(p.id)}
-                              className="p-1.5 text-red-600 hover:text-red-800 transition cursor-pointer"
-                              title="Delete Participant"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingParticipantCollegeId(p.id);
+                                  setEditingCollegeValue(p.college || '');
+                                }}
+                                className="p-1.5 text-zinc-600 hover:text-[#A30B1A] transition cursor-pointer rounded hover:bg-zinc-100"
+                                title="Change College Name manually"
+                              >
+                                <Edit3 className="w-4 h-4" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteParticipant(p.id)}
+                                className="p-1.5 text-red-600 hover:text-red-800 transition cursor-pointer rounded hover:bg-red-50"
+                                title="Delete Participant"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))
