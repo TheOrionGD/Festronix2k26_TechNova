@@ -288,14 +288,7 @@ export default function Round1Quiz() {
       }, 0);
       return () => clearTimeout(autoSubmitTimer);
     }
-    if (eventState?.roundEndsAt && eventState?.status === 'ROUND_1_RUNNING') {
-      const globalRemSecs = Math.max(0, Math.floor((new Date(eventState.roundEndsAt).getTime() - Date.now()) / 1000));
-      const syncTimer = setTimeout(() => {
-        setTimeLeft(prev => Math.min(prev, globalRemSecs));
-      }, 0);
-      return () => clearTimeout(syncTimer);
-    }
-  }, [eventState?.roundEndsAt, eventState?.status, isSubmitted, isLoading, handleSubmitQuiz]);
+  }, [eventState?.status, isSubmitted, isLoading, handleSubmitQuiz]);
 
   // Re-establishment of network: Automatically sync all locally stored answers to database
   useEffect(() => {

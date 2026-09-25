@@ -937,13 +937,13 @@ export const AppProvider = ({ children }) => {
     if (!userEntry) return false;
 
     if (roundNumber === 1) {
-      return !!userEntry.r1Completed || (userEntry.r1SubmittedAt > 0) || (userEntry.r1Score > 0 && eventState?.status !== 'ROUND_1_RUNNING');
+      return !!userEntry.r1Completed;
     }
     if (roundNumber === 2) {
-      return !!userEntry.r2Completed || (userEntry.r2Score >= 30 && userEntry.r2LatestVerified > 0);
+      return !!userEntry.r2Completed;
     }
     if (roundNumber === 3) {
-      return !!userEntry.r3Completed || (userEntry.r3SubmittedAt > 0) || (userEntry.r3Score > 0);
+      return !!userEntry.r3Completed;
     }
     return false;
   };

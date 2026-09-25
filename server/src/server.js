@@ -1289,17 +1289,20 @@ function getGrandTotalBand(score) {
 async function computeLeaderboardData() {
   let participants = [];
   let quizAttemptsList = [];
+  let debugAttemptsList = [];
   let submissions = [];
   let huntAttemptsList = [];
 
   if (isDbConnected) {
     participants = await User.find({ role: 'PARTICIPANT' });
     quizAttemptsList = await QuizAttempt.find();
+    debugAttemptsList = await DebugAttempt.find();
     submissions = await Submission.find({ status: 'VERIFIED' });
     huntAttemptsList = await HuntAttempt.find();
   } else {
     participants = memoryStore.users.filter(u => u.role === 'PARTICIPANT');
     quizAttemptsList = Object.values(memoryStore.quizAttempts);
+    debugAttemptsList = Object.values(memoryStore.debugAttempts);
     submissions = memoryStore.submissions.filter(s => s.status === 'VERIFIED');
     huntAttemptsList = Object.values(memoryStore.huntAttempts);
   }
@@ -1338,6 +1341,7 @@ async function computeLeaderboardData() {
   // 1. Build participant base records
   const rawList = participants.map(p => {
     const qAttempt = quizAttemptsList.find(a => a.participantId === p.id);
+    const dAttempt = debugAttemptsList.find(a => a.participantId === p.id);
     const r2Subs = submissions.filter(s => s.participantId === p.id);
     const hAttempt = huntAttemptsList.find(a => a.participantId === p.id);
 
@@ -1354,28 +1358,32 @@ async function computeLeaderboardData() {
         });
       }
     }
-    const r1SubmittedAt = qAttempt?.submittedAt ? new Date(qAttempt.submittedAt).getTime() : (qAttempt?.updatedAt ? new Date(qAttempt.updatedAt).getTime() : 0);
+    const isQSubmitted = qAttempt?.status === 'SUBMITTED';
+    const r1SubmittedAt = isQSubmitted && qAttempt?.submittedAt ? new Date(qAttempt.submittedAt).getTime() : 0;
     const r1Duration = (qAttempt?.startedAt && qAttempt?.submittedAt)
       ? (new Date(qAttempt.submittedAt).getTime() - new Date(qAttempt.startedAt).getTime())
       : 999999999;
     const hasAttemptedR1 = !!qAttempt;
-    const r1Completed = (qAttempt?.status === 'SUBMITTED') || (r1SubmittedAt > 0) || (r1Score > 0 && isR1EndedOrFurther);
+    const r1Completed = isQSubmitted || (hasAttemptedR1 && r1Score > 0 && isR1EndedOrFurther);
 
     const r2Score = r2Subs.reduce((acc, curr) => acc + (curr.marks || 0), 0);
     const r2LatestVerified = r2Subs.length > 0
       ? Math.max(...r2Subs.map(s => s.verifiedAt ? new Date(s.verifiedAt).getTime() : 0))
       : 0;
-    const hasAttemptedR2 = r2Subs.length > 0;
-    const r2Completed = (r2Subs.length >= 3 && r2Subs.every(s => s.status === 'VERIFIED')) || (memoryStore.debugAttempts[p.id]?.status === 'COMPLETED');
+    const hasAttemptedR2 = r2Subs.length > 0 || !!dAttempt;
+    const r2Completed = (r2Subs.length >= 3 && r2Subs.every(s => s.status === 'VERIFIED')) || (dAttempt?.status === 'COMPLETED');
 
+    const isHCompleted = hAttempt?.status === 'COMPLETED';
     const r3Score = hAttempt ? (hAttempt.score || 0) : 0;
-    const r3SubmittedAt = hAttempt?.updatedAt ? new Date(hAttempt.updatedAt).getTime() : 0;
+    const r3SubmittedAt = isHCompleted && (hAttempt?.submittedAt || hAttempt?.updatedAt)
+      ? new Date(hAttempt.submittedAt || hAttempt.updatedAt).getTime()
+      : 0;
     const hasAttemptedR3 = !!hAttempt;
-    const r3Completed = (hAttempt?.status === 'COMPLETED') || (r3SubmittedAt > 0);
+    const r3Completed = isHCompleted || (hasAttemptedR3 && r3Score > 0 && isAllRoundsEnded);
 
     const hintsMap = hAttempt?.hintsUsed instanceof Map ? Object.fromEntries(hAttempt.hintsUsed) : (hAttempt?.hintsUsed || {});
     const r3HintsCount = Object.values(hintsMap).filter(Boolean).length;
-    const r3Duration = (hAttempt?.startedAt && hAttempt?.status === 'COMPLETED' && hAttempt?.updatedAt)
+    const r3Duration = (hAttempt?.startedAt && isHCompleted && hAttempt?.updatedAt)
       ? (new Date(hAttempt.updatedAt).getTime() - new Date(hAttempt.startedAt).getTime())
       : 999999999;
 
@@ -1555,7 +1563,7 @@ async function computeLeaderboardData() {
       if (isQualifiedR2) { statusText = '⭐ Graded for Round 2'; qualificationStatus = 'QUALIFIED_R2'; }
       else { statusText = 'Non-Graded for Round 2'; qualificationStatus = 'NON_GRADED_R2'; }
     } else if (state.status === 'ROUND_1_RUNNING') {
-      statusText = item.hasAttemptedR1 ? 'Round 1 Submitted' : 'Round 1 Active';
+      statusText = item.r1Completed ? 'Round 1 Submitted' : (item.hasAttemptedR1 ? 'Round 1 In Progress' : 'Round 1 Active');
       qualificationStatus = 'IN_CONTENTION';
     }
 
@@ -2131,13 +2139,18 @@ app.post('/api/quiz/sync-answers', async (req, res) => {
 
 app.post('/api/quiz/submit', async (req, res) => {
   const { participantId, userAnswers } = req.body;
+  const cleanPid = String(participantId || '').trim();
+
+  if (!cleanPid) {
+    return res.status(400).json({ success: false, message: 'Valid participantId is required.' });
+  }
 
   try {
     let attempt = null;
     if (isDbConnected) {
-      attempt = await QuizAttempt.findOne({ participantId });
+      attempt = await QuizAttempt.findOne({ participantId: cleanPid });
     } else {
-      attempt = memoryStore.quizAttempts[participantId];
+      attempt = memoryStore.quizAttempts[cleanPid];
     }
 
     if (!attempt) {
