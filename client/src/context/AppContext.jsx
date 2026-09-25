@@ -1128,6 +1128,7 @@ export const AppProvider = ({ children }) => {
       flaggedQuestions,
       toggleFlagQuestion,
       roundTimeLeft,
+      formatRoundTime,
       recalculateLeaderboard,
       disqualifyParticipantManual,
       reinstateParticipant,
