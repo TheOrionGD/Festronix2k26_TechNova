@@ -1,6 +1,6 @@
 import React from 'react';
 import { useApp } from '../context/useApp';
-import { Bell, Copy, Shield, LogOut, Sun, Moon } from 'lucide-react';
+import { Bell, Copy, Shield, LogOut, Sun, Moon, Clock } from 'lucide-react';
 
 export default function Header() {
   const { 
@@ -14,7 +14,10 @@ export default function Header() {
     isNotificationsOpen,
     toggleNotifications,
     markAllNotificationsRead,
-    announcements
+    announcements,
+    eventState,
+    roundTimeLeft,
+    formatRoundTime
   } = useApp();
 
   const copyParticipantId = () => {
@@ -53,6 +56,29 @@ export default function Header() {
           </div>
         </div>
       </div>
+
+      {/* Center: Live Round Time & Status Badge */}
+      {eventState?.status?.includes('_RUNNING') && (
+        <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-red-500/10 dark:bg-red-500/20 border-2 border-[#D60303] text-zinc-900 dark:text-white shadow-xs font-mono text-xs font-bold">
+          <span className="w-2.5 h-2.5 rounded-full bg-[#D60303] animate-ping" />
+          <span className="text-[#D60303] uppercase tracking-wider">
+            {eventState.status === 'ROUND_1_RUNNING' && 'R1 QUIZ'}
+            {eventState.status === 'ROUND_2_RUNNING' && 'R2 DEBUG'}
+            {eventState.status === 'ROUND_3_RUNNING' && 'R3 HUNT'}
+          </span>
+          <span className="text-zinc-400">|</span>
+          <span className={`flex items-center gap-1.5 ${roundTimeLeft < 300 ? 'text-[#D60303] font-black animate-bounce' : 'text-zinc-800 dark:text-zinc-100'}`}>
+            <Clock className="w-3.5 h-3.5 text-[#D60303] animate-pulse" />
+            <span>{formatRoundTime(roundTimeLeft)}</span>
+          </span>
+        </div>
+      )}
+      {['ROUND_1_ENDED', 'ROUND_2_ENDED', 'ROUND_3_ENDED', 'COMPLETED'].includes(eventState?.status) && (
+        <div className="hidden sm:flex items-center gap-2 px-3 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs font-mono font-bold text-zinc-600 dark:text-zinc-300">
+          <span className="w-2 h-2 rounded-full bg-amber-500" />
+          <span>{eventState.status.replace(/_/g, ' ')}</span>
+        </div>
+      )}
 
       {/* Right: Theme Toggle, Anti-cheat indicator, Notifications, User info & Actions */}
       <div className="flex items-center gap-3 sm:gap-4 relative">

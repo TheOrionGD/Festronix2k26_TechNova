@@ -21,11 +21,23 @@ import {
   Radio,
   Trophy,
   Sparkles,
-  AlertCircle,
   MessageSquare,
   Calculator,
   Lock,
-  Eye
+  Eye,
+  ShieldAlert,
+  AlertTriangle,
+  RotateCcw,
+  UserX,
+  Search,
+  Filter,
+  GitBranch,
+  Sliders,
+  Percent,
+  Save,
+  RefreshCw,
+  AlertCircle,
+  ArrowRight
 } from 'lucide-react';
 
 export default function CoordinatorPortal() {
@@ -38,11 +50,176 @@ export default function CoordinatorPortal() {
     announcements,
     createAnnouncement,
     eventState,
-    updateEventState
+    updateEventState,
+    roundTimeLeft,
+    formatRoundTime,
+    recalculateLeaderboard,
+    disqualifyParticipantManual,
+    reinstateParticipant,
+    antiCheatFlags,
+    updateParticipantGradingOverride,
+    formatAnnouncementTime
   } = useApp();
-  const [activeTab, setActiveTab] = useState('verification'); // 'verification' | 'participants' | 'announcements' | 'content' | 'leaderboard'
+  const [activeTab, setActiveTab] = useState('verification'); // 'verification' | 'participants' | 'cohorts' | 'malpractice' | 'announcements' | 'content' | 'leaderboard'
   const [submissionsList, setSubmissionsList] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Malpractice & Disqualification Management State
+  const [malpracticeRecords, setMalpracticeRecords] = useState([]);
+  const [malpracticeLogs, setMalpracticeLogs] = useState([]);
+  const [malpracticeSearch, setMalpracticeSearch] = useState('');
+  const [malpracticeFilter, setMalpracticeFilter] = useState('ALL'); // 'ALL' | 'DISQUALIFIED' | 'WARNINGS' | 'MY_STATION'
+  const [disqualifyingParticipant, setDisqualifyingParticipant] = useState(null);
+  const [disqualifyReason, setDisqualifyReason] = useState('Tab Switching / Background Process');
+  const [customReason, setCustomReason] = useState('');
+  const [isProcessingMalpractice, setIsProcessingMalpractice] = useState(false);
+  const [malpracticeMsg, setMalpracticeMsg] = useState(null);
+
+  // Graded vs Non-Graded Cohort & Dynamic Qualification Management State
+  const [cohortSearch, setCohortSearch] = useState('');
+  const [cohortFilter, setCohortFilter] = useState('ALL'); // 'ALL' | 'R2_GRADED' | 'R2_NON_GRADED' | 'R3_GRADED' | 'R3_NON_GRADED' | 'DISQUALIFIED'
+  const [qR1Mode, setQR1Mode] = useState(eventState?.round1QualifyMode || 'PERCENTAGE');
+  const [qR1Percentage, setQR1Percentage] = useState(eventState?.round1QualifyPercentage ?? 70);
+  const [qR1Count, setQR1Count] = useState(eventState?.round1QualifyCount ?? 30);
+  const [qR2Mode, setQR2Mode] = useState(eventState?.round2QualifyMode || 'PERCENTAGE');
+  const [qR2Percentage, setQR2Percentage] = useState(eventState?.round2QualifyPercentage ?? 50);
+  const [qR2Count, setQR2Count] = useState(eventState?.round2QualifyCount ?? 10);
+  const [qR3Stations, setQR3Stations] = useState(eventState?.round3StationCount ?? 5);
+  const [isSavingQualification, setIsSavingQualification] = useState(false);
+  const [cohortActionMsg, setCohortActionMsg] = useState(null);
+
+  useEffect(() => {
+    if (eventState) {
+      if (eventState.round1QualifyMode) setQR1Mode(eventState.round1QualifyMode);
+      if (eventState.round1QualifyPercentage !== undefined) setQR1Percentage(eventState.round1QualifyPercentage);
+      if (eventState.round1QualifyCount !== undefined) setQR1Count(eventState.round1QualifyCount);
+      if (eventState.round2QualifyMode) setQR2Mode(eventState.round2QualifyMode);
+      if (eventState.round2QualifyPercentage !== undefined) setQR2Percentage(eventState.round2QualifyPercentage);
+      if (eventState.round2QualifyCount !== undefined) setQR2Count(eventState.round2QualifyCount);
+      if (eventState.round3StationCount !== undefined) setQR3Stations(eventState.round3StationCount);
+    }
+  }, [eventState]);
+
+  const handleSaveQualificationSettings = async (e) => {
+    if (e) e.preventDefault();
+    setIsSavingQualification(true);
+    try {
+      const payload = {
+        round1QualifyMode: qR1Mode,
+        round1QualifyPercentage: Number(qR1Percentage),
+        round1QualifyCount: Number(qR1Count),
+        round2QualifyMode: qR2Mode,
+        round2QualifyPercentage: Number(qR2Percentage),
+        round2QualifyCount: Number(qR2Count),
+        round3StationCount: Number(qR3Stations)
+      };
+      await updateEventState(payload);
+      if (recalculateLeaderboard) {
+        await recalculateLeaderboard();
+      }
+      await fetchLeaderboard();
+      setCohortActionMsg({ type: 'success', text: 'Qualification parameters updated! Dynamic cohorts have been recomputed.' });
+    } catch (err) {
+      setCohortActionMsg({ type: 'error', text: 'Error saving qualification parameters.' });
+    } finally {
+      setIsSavingQualification(false);
+      setTimeout(() => setCohortActionMsg(null), 4000);
+    }
+  };
+
+  const handleToggleGradingOverride = async (participantId, round, newStatus) => {
+    try {
+      const res = await updateParticipantGradingOverride(participantId, round, newStatus);
+      if (res.success) {
+        setCohortActionMsg({ type: 'success', text: `Participant ${participantId} Round ${round} status set to ${newStatus}.` });
+        await fetchLeaderboard();
+      } else {
+        setCohortActionMsg({ type: 'error', text: res.message || 'Failed to update cohort status.' });
+      }
+    } catch (err) {
+      setCohortActionMsg({ type: 'error', text: 'Network error updating cohort status.' });
+    } finally {
+      setTimeout(() => setCohortActionMsg(null), 4000);
+    }
+  };
+
+  const fetchMalpracticeData = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/coordinator/malpractice-records`);
+      const data = await res.json();
+      if (data.success) {
+        setMalpracticeRecords(data.records || []);
+        setMalpracticeLogs(data.logs || []);
+      }
+    } catch (err) {
+      console.error('Fetch malpractice records error:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'malpractice') {
+      fetchMalpracticeData();
+    }
+  }, [activeTab]);
+
+  const handleExecuteDisqualify = async () => {
+    if (!disqualifyingParticipant) return;
+    setIsProcessingMalpractice(true);
+    const finalReason = disqualifyReason === 'OTHER' ? (customReason.trim() || 'Malpractice violation') : disqualifyReason;
+    try {
+      const res = await disqualifyParticipantManual(disqualifyingParticipant.id, finalReason);
+      if (res.success) {
+        setMalpracticeMsg({ type: 'success', text: `Participant ${disqualifyingParticipant.id} has been disqualified and frozen.` });
+        setDisqualifyingParticipant(null);
+        setCustomReason('');
+        await fetchMalpracticeData();
+        await fetchLeaderboard();
+      } else {
+        setMalpracticeMsg({ type: 'error', text: res.message || 'Failed to disqualify participant.' });
+      }
+    } catch (err) {
+      setMalpracticeMsg({ type: 'error', text: 'Server communication error.' });
+    } finally {
+      setIsProcessingMalpractice(false);
+    }
+  };
+
+  const handleExecuteReinstate = async (participantId) => {
+    if (!window.confirm(`Are you sure you want to reinstate participant ${participantId}? This will restore their active competition status.`)) return;
+    setIsProcessingMalpractice(true);
+    try {
+      const res = await reinstateParticipant(participantId);
+      if (res.success) {
+        setMalpracticeMsg({ type: 'success', text: `Participant ${participantId} has been successfully reinstated.` });
+        await fetchMalpracticeData();
+        await fetchLeaderboard();
+      } else {
+        setMalpracticeMsg({ type: 'error', text: res.message || 'Failed to reinstate participant.' });
+      }
+    } catch (err) {
+      setMalpracticeMsg({ type: 'error', text: 'Server communication error.' });
+    } finally {
+      setIsProcessingMalpractice(false);
+    }
+  };
+
+  const handleIssueWarning = async (participantId) => {
+    try {
+      await fetch(`${API_BASE}/anticheat/log`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          participantId,
+          type: 'COORDINATOR_WARNING',
+          message: `Official malpractice warning issued by Lab Coordinator ${currentUser?.id || ''}`
+        })
+      });
+      setMalpracticeMsg({ type: 'success', text: `Official warning issued to participant ${participantId}.` });
+      await fetchMalpracticeData();
+    } catch (err) {
+      setMalpracticeMsg({ type: 'error', text: 'Error issuing warning.' });
+    }
+  };
 
   // Announcement Creation State
   const [annTitle, setAnnTitle] = useState('');
@@ -53,6 +230,9 @@ export default function CoordinatorPortal() {
 
   const handleSetRoundStatus = (status, activeRound) => {
     updateEventState({ status, activeRound });
+    setTimeout(() => {
+      fetchLeaderboard();
+    }, 400);
     alert(`⚡ Event Status Updated to: ${status}`);
   };
 
@@ -333,6 +513,34 @@ export default function CoordinatorPortal() {
     }
   };
 
+  const handleDeleteAllParticipants = async () => {
+    if (!window.confirm("⚠️ DANGER: Are you sure you want to delete ALL participant accounts, submissions, and attempts from the database? This cannot be undone.")) {
+      return;
+    }
+    const confirmTxt = prompt("Type 'DELETE' to confirm permanent deletion of all participants:");
+    if (confirmTxt !== 'DELETE') {
+      alert("Deletion cancelled.");
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/coordinator/delete-all-participants`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(data.message);
+        await fetchParticipants();
+        await fetchLeaderboard();
+      } else {
+        alert(data.error || 'Failed to delete all participants.');
+      }
+    } catch (err) {
+      console.error('Delete all participants error:', err);
+      alert('Network error deleting participants.');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-transparent text-[#595959] dark:text-[#f4f4f5] flex flex-col transition-colors duration-200">
       <Header />
@@ -373,9 +581,17 @@ export default function CoordinatorPortal() {
                   Lab Coordinator Round Access Controls
                 </h3>
               </div>
-              <span className="text-xs font-mono font-bold px-3 py-1 rounded-full bg-[#D60303] text-white">
-                CURRENT STATUS: {eventState?.status}
-              </span>
+              <div className="flex items-center gap-2">
+                {eventState?.status?.includes('RUNNING') && (
+                  <span className="px-3 py-1 rounded-full bg-emerald-600 text-white font-mono text-xs font-bold flex items-center gap-1.5 shadow-sm animate-pulse">
+                    <Clock className="w-3.5 h-3.5" />
+                    LIVE: {formatRoundTime(roundTimeLeft)}
+                  </span>
+                )}
+                <span className="text-xs font-mono font-bold px-3 py-1 rounded-full bg-[#D60303] text-white">
+                  CURRENT STATUS: {eventState?.status}
+                </span>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-7 gap-2 pt-1 text-xs font-bold font-mono">
@@ -448,6 +664,38 @@ export default function CoordinatorPortal() {
             >
               <Users className="w-4 h-4" />
               <span>Participants ({participantsList.length})</span>
+            </button>
+
+            <button
+              onClick={() => {
+                setActiveTab('cohorts');
+                fetchLeaderboard();
+              }}
+              className={`px-4 py-2 rounded-xl transition-all duration-200 flex items-center gap-2 cursor-pointer btn-interactive ${activeTab === 'cohorts' ? 'bg-[#D60303] text-white shadow-xs' : 'bg-white/80 dark:bg-[#141417]/80 border border-zinc-200 dark:border-[#27272a] text-zinc-700 dark:text-[#a1a1aa] hover:bg-zinc-100 dark:hover:bg-[#1a1a1e]'
+                }`}
+            >
+              <GitBranch className="w-4 h-4 text-emerald-400" />
+              <span>Graded Cohorts & Qualification</span>
+              <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-mono text-[10px] font-bold">
+                100% → 70% → 50%
+              </span>
+            </button>
+
+            <button
+              onClick={() => {
+                setActiveTab('malpractice');
+                fetchMalpracticeData();
+              }}
+              className={`px-4 py-2 rounded-xl transition-all duration-200 flex items-center gap-2 cursor-pointer btn-interactive ${activeTab === 'malpractice' ? 'bg-[#D60303] text-white shadow-xs' : 'bg-white/80 dark:bg-[#141417]/80 border border-zinc-200 dark:border-[#27272a] text-zinc-700 dark:text-[#a1a1aa] hover:bg-zinc-100 dark:hover:bg-[#1a1a1e]'
+                }`}
+            >
+              <ShieldAlert className="w-4 h-4 text-amber-300" />
+              <span>Malpractice & Disqualification</span>
+              {malpracticeRecords.filter(r => r.isDisqualified).length > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full bg-red-600 text-white font-mono text-[10px] font-bold">
+                  {malpracticeRecords.filter(r => r.isDisqualified).length}
+                </span>
+              )}
             </button>
 
             <button
@@ -577,6 +825,15 @@ export default function CoordinatorPortal() {
                   >
                     <UserPlus className="w-4 h-4" />
                     <span>{isCreatingPart ? 'Cancel' : 'Add Single Participant'}</span>
+                  </button>
+
+                  <button
+                    onClick={handleDeleteAllParticipants}
+                    className="px-4 py-2 rounded-xl bg-red-700 hover:bg-red-800 text-white font-bold text-xs flex items-center gap-2 cursor-pointer btn-interactive shadow-xs"
+                    title="Permanently delete all participant accounts, attempts, and submissions from database"
+                  >
+                    <Trash2 className="w-4 h-4 text-white" />
+                    <span>Delete All Participants</span>
                   </button>
                 </div>
               </div>
@@ -912,6 +1169,959 @@ export default function CoordinatorPortal() {
             </div>
           )}
 
+          {/* Tab: Graded Cohorts & Dynamic Qualification Separation */}
+          {activeTab === 'cohorts' && (() => {
+            const totalCount = leaderboard.length || participantsList.length || 0;
+            
+            // Round 2 Graded Target
+            const r2Target = qR1Mode === 'PERCENTAGE'
+              ? Math.max(1, Math.ceil(totalCount * (Number(qR1Percentage) / 100)))
+              : Math.min(totalCount, Number(qR1Count));
+            const r2Actual = leaderboard.filter(p => p.isRound2Graded && !p.isDisqualified).length;
+            const r2NonGraded = totalCount - r2Actual;
+
+            // Round 3 Graded Target
+            const r3Target = qR2Mode === 'PERCENTAGE'
+              ? Math.max(1, Math.ceil(r2Actual * (Number(qR2Percentage) / 100)))
+              : Math.min(r2Actual || totalCount, Number(qR2Count));
+            const r3Actual = leaderboard.filter(p => p.isRound3Graded && !p.isDisqualified).length;
+            const r3NonGraded = totalCount - r3Actual;
+
+            const disqualifiedCount = leaderboard.filter(p => p.isDisqualified || p.accountStatus === 'DISQUALIFIED').length;
+
+            let displayed = [...leaderboard];
+            if (cohortFilter === 'R2_GRADED') {
+              displayed = displayed.filter(p => p.isRound2Graded && !p.isDisqualified);
+            } else if (cohortFilter === 'R2_NON_GRADED') {
+              displayed = displayed.filter(p => !p.isRound2Graded && !p.isDisqualified);
+            } else if (cohortFilter === 'R3_GRADED') {
+              displayed = displayed.filter(p => p.isRound3Graded && !p.isDisqualified);
+            } else if (cohortFilter === 'R3_NON_GRADED') {
+              displayed = displayed.filter(p => !p.isRound3Graded && !p.isDisqualified);
+            } else if (cohortFilter === 'DISQUALIFIED') {
+              displayed = displayed.filter(p => p.isDisqualified || p.accountStatus === 'DISQUALIFIED');
+            }
+
+            if (cohortSearch.trim()) {
+              const q = cohortSearch.toLowerCase();
+              displayed = displayed.filter(p => 
+                p.id?.toLowerCase().includes(q) || 
+                p.name?.toLowerCase().includes(q) || 
+                p.college?.toLowerCase().includes(q) || 
+                p.department?.toLowerCase().includes(q)
+              );
+            }
+
+            return (
+              <div className="space-y-6 animate-slide-up">
+                {/* Status Messages */}
+                {cohortActionMsg && (
+                  <div className={`p-4 rounded-2xl text-xs font-bold flex items-center gap-2 animate-slide-up ${
+                    cohortActionMsg.type === 'success'
+                      ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/30'
+                      : 'bg-red-500/10 text-red-600 border border-red-500/30'
+                  }`}>
+                    {cohortActionMsg.type === 'success' ? <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-500" /> : <AlertTriangle className="w-4 h-4 shrink-0 text-red-500" />}
+                    <span>{cohortActionMsg.text}</span>
+                  </div>
+                )}
+
+                {/* DYNAMIC FUNNEL DASHBOARD HEADER */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* Total Participants (100%) */}
+                  <div className="bg-white/80 dark:bg-[#141417]/80 backdrop-blur-md p-5 rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80 shadow-sm space-y-2 card-hover-lift">
+                    <div className="flex items-center justify-between text-xs font-mono text-zinc-500 dark:text-zinc-400">
+                      <span className="font-bold uppercase tracking-wider">Total Registered (100%)</span>
+                      <Users className="w-4 h-4 text-zinc-400" />
+                    </div>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-3xl font-black font-mono text-zinc-900 dark:text-white">{totalCount}</span>
+                      <span className="text-xs font-mono text-zinc-500">Participants</span>
+                    </div>
+                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400 font-mono">
+                      Dynamic total from coordinator accounts
+                    </p>
+                  </div>
+
+                  {/* Round 1 Cohort (100% Graded) */}
+                  <div className="bg-white/80 dark:bg-[#141417]/80 backdrop-blur-md p-5 rounded-2xl border border-blue-500/20 shadow-sm space-y-2 card-hover-lift">
+                    <div className="flex items-center justify-between text-xs font-mono text-blue-600 dark:text-blue-400">
+                      <span className="font-bold uppercase tracking-wider">Round 1 (Quiz)</span>
+                      <span className="px-2 py-0.5 rounded-full bg-blue-500/10 font-bold text-[10px]">100% Cohort</span>
+                    </div>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-3xl font-black font-mono text-blue-600 dark:text-blue-400">{totalCount}</span>
+                      <span className="text-xs font-mono text-zinc-500">Graded (20M)</span>
+                    </div>
+                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400 font-mono">
+                      100% of participants compete & graded
+                    </p>
+                  </div>
+
+                  {/* Round 2 Cohort (70% Target) */}
+                  <div className="bg-white/80 dark:bg-[#141417]/80 backdrop-blur-md p-5 rounded-2xl border border-emerald-500/30 shadow-sm space-y-2 card-hover-lift">
+                    <div className="flex items-center justify-between text-xs font-mono text-emerald-600 dark:text-emerald-400">
+                      <span className="font-bold uppercase tracking-wider">Round 2 (Debug It)</span>
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 font-bold text-[10px]">
+                        {qR1Mode === 'PERCENTAGE' ? `${qR1Percentage}% Target` : `${qR1Count} Target`}
+                      </span>
+                    </div>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-3xl font-black font-mono text-emerald-600 dark:text-emerald-400">{r2Actual}</span>
+                      <span className="text-xs font-mono text-zinc-500">Graded / {r2NonGraded} Non-Graded</span>
+                    </div>
+                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400 font-mono">
+                      Target: {r2Target} contestants (3 × 10M = 30M)
+                    </p>
+                  </div>
+
+                  {/* Round 3 Cohort (50% of R2 Target) */}
+                  <div className="bg-white/80 dark:bg-[#141417]/80 backdrop-blur-md p-5 rounded-2xl border border-red-500/30 shadow-sm space-y-2 card-hover-lift">
+                    <div className="flex items-center justify-between text-xs font-mono text-[#D60303]">
+                      <span className="font-bold uppercase tracking-wider">Round 3 (Tech Hunt)</span>
+                      <span className="px-2 py-0.5 rounded-full bg-red-500/15 font-bold text-[10px]">
+                        {qR2Mode === 'PERCENTAGE' ? `${qR2Percentage}% of R2` : `${qR2Count} Target`}
+                      </span>
+                    </div>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-3xl font-black font-mono text-[#D60303]">{r3Actual}</span>
+                      <span className="text-xs font-mono text-zinc-500">Graded / {qR3Stations} Stations</span>
+                    </div>
+                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400 font-mono">
+                      Target: {r3Target} contestants ({qR3Stations} × 10M = 50M)
+                    </p>
+                  </div>
+                </div>
+
+                {/* DYNAMIC QUALIFICATION PARAMETERS CONFIGURATION CARD */}
+                <div className="bg-white/80 dark:bg-[#141417]/80 backdrop-blur-md p-6 rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80 shadow-sm space-y-5 card-hover-lift">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-200 dark:border-[#27272a] pb-4">
+                    <div className="flex items-center gap-2.5">
+                      <Sliders className="w-5 h-5 text-[#D60303]" />
+                      <div>
+                        <h3 className="text-sm font-bold text-zinc-900 dark:text-white">Dynamic Qualification & Cohort Cutoff Rules</h3>
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                          Set the dynamic qualification threshold percentage or exact participant counts entered by coordinator.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setQR1Mode('PERCENTAGE');
+                        setQR1Percentage(70);
+                        setQR1Count(30);
+                        setQR2Mode('PERCENTAGE');
+                        setQR2Percentage(50);
+                        setQR2Count(10);
+                        setQR3Stations(5);
+                      }}
+                      className="px-3 py-1.5 rounded-xl border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300 text-xs font-mono font-bold transition cursor-pointer self-start sm:self-auto"
+                    >
+                      Reset Defaults (100% → 70% → 50%)
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleSaveQualificationSettings} className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                      {/* Round 1 -> Round 2 Qualification */}
+                      <div className="p-4 rounded-xl bg-zinc-50 dark:bg-[#09090b] border border-zinc-200 dark:border-zinc-800 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-zinc-900 dark:text-white font-mono flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                            R1 → R2 Qualification (70%)
+                          </span>
+                          <span className="text-[10px] font-mono text-zinc-400">Dynamic</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <label className="flex items-center gap-1 text-xs cursor-pointer">
+                            <input
+                              type="radio"
+                              name="r1Mode"
+                              value="PERCENTAGE"
+                              checked={qR1Mode === 'PERCENTAGE'}
+                              onChange={() => setQR1Mode('PERCENTAGE')}
+                            />
+                            <span>Percentage (%)</span>
+                          </label>
+                          <label className="flex items-center gap-1 text-xs cursor-pointer ml-3">
+                            <input
+                              type="radio"
+                              name="r1Mode"
+                              value="COUNT"
+                              checked={qR1Mode === 'COUNT'}
+                              onChange={() => setQR1Mode('COUNT')}
+                            />
+                            <span>Exact Count</span>
+                          </label>
+                        </div>
+                        {qR1Mode === 'PERCENTAGE' ? (
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                min="1"
+                                max="100"
+                                required
+                                value={qR1Percentage}
+                                onChange={(e) => setQR1Percentage(e.target.value)}
+                                className="w-full px-3 py-2 bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg text-xs font-mono"
+                              />
+                              <span className="text-xs font-mono font-bold">%</span>
+                            </div>
+                            <span className="text-[10px] text-zinc-500 font-mono mt-1 block">
+                              Target: ~{Math.ceil(totalCount * (Number(qR1Percentage || 70) / 100))} of {totalCount} participants
+                            </span>
+                          </div>
+                        ) : (
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                min="1"
+                                max={totalCount || 500}
+                                required
+                                value={qR1Count}
+                                onChange={(e) => setQR1Count(e.target.value)}
+                                className="w-full px-3 py-2 bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg text-xs font-mono"
+                              />
+                              <span className="text-xs font-mono font-bold">Users</span>
+                            </div>
+                            <span className="text-[10px] text-zinc-500 font-mono mt-1 block">
+                              Exact cutoff: {qR1Count} participants
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Round 2 -> Round 3 Qualification */}
+                      <div className="p-4 rounded-xl bg-zinc-50 dark:bg-[#09090b] border border-zinc-200 dark:border-zinc-800 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-zinc-900 dark:text-white font-mono flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                            R2 → R3 Qualification (50%)
+                          </span>
+                          <span className="text-[10px] font-mono text-zinc-400">Dynamic</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <label className="flex items-center gap-1 text-xs cursor-pointer">
+                            <input
+                              type="radio"
+                              name="r2Mode"
+                              value="PERCENTAGE"
+                              checked={qR2Mode === 'PERCENTAGE'}
+                              onChange={() => setQR2Mode('PERCENTAGE')}
+                            />
+                            <span>Percentage (%)</span>
+                          </label>
+                          <label className="flex items-center gap-1 text-xs cursor-pointer ml-3">
+                            <input
+                              type="radio"
+                              name="r2Mode"
+                              value="COUNT"
+                              checked={qR2Mode === 'COUNT'}
+                              onChange={() => setQR2Mode('COUNT')}
+                            />
+                            <span>Exact Count</span>
+                          </label>
+                        </div>
+                        {qR2Mode === 'PERCENTAGE' ? (
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                min="1"
+                                max="100"
+                                required
+                                value={qR2Percentage}
+                                onChange={(e) => setQR2Percentage(e.target.value)}
+                                className="w-full px-3 py-2 bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg text-xs font-mono"
+                              />
+                              <span className="text-xs font-mono font-bold">%</span>
+                            </div>
+                            <span className="text-[10px] text-zinc-500 font-mono mt-1 block">
+                              Target: ~{Math.ceil(r2Actual * (Number(qR2Percentage || 50) / 100))} of {r2Actual} R2 users
+                            </span>
+                          </div>
+                        ) : (
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                min="1"
+                                max={r2Actual || 200}
+                                required
+                                value={qR2Count}
+                                onChange={(e) => setQR2Count(e.target.value)}
+                                className="w-full px-3 py-2 bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg text-xs font-mono"
+                              />
+                              <span className="text-xs font-mono font-bold">Users</span>
+                            </div>
+                            <span className="text-[10px] text-zinc-500 font-mono mt-1 block">
+                              Exact cutoff: {qR2Count} participants
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Round 3 Station Count */}
+                      <div className="p-4 rounded-xl bg-zinc-50 dark:bg-[#09090b] border border-zinc-200 dark:border-zinc-800 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-zinc-900 dark:text-white font-mono flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                            Round 3 Station Count
+                          </span>
+                          <span className="text-[10px] font-mono text-zinc-400">Dynamic</span>
+                        </div>
+                        <div>
+                          <label className="text-[11px] text-zinc-500 font-mono block mb-1">
+                            Number of Sequential Stations (10 pts each)
+                          </label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              min="1"
+                              max="20"
+                              required
+                              value={qR3Stations}
+                              onChange={(e) => setQR3Stations(e.target.value)}
+                              className="w-full px-3 py-2 bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg text-xs font-mono"
+                            />
+                            <span className="text-xs font-mono font-bold">Stations</span>
+                          </div>
+                          <span className="text-[10px] text-zinc-500 font-mono mt-1 block">
+                            Total Hunt Marks: {Number(qR3Stations || 5) * 10} pts
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end pt-2">
+                      <button
+                        type="submit"
+                        disabled={isSavingQualification}
+                        className="px-6 py-2.5 rounded-xl bg-[#D60303] hover:bg-[#A30B1A] disabled:opacity-50 text-white font-bold text-xs shadow-md transition flex items-center gap-2 cursor-pointer btn-interactive"
+                      >
+                        <Save className="w-4 h-4" />
+                        <span>{isSavingQualification ? 'Recalculating Dynamic Cohorts...' : 'Save & Dynamically Recalculate Cohorts'}</span>
+                      </button>
+                    </div>
+                  </form>
+                </div>
+
+                {/* GRADED VS NON-GRADED PARTICIPANT SEPARATION TABLE */}
+                <div className="bg-white/80 dark:bg-[#141417]/80 backdrop-blur-md p-6 rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80 shadow-sm space-y-4 card-hover-lift">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-zinc-200 dark:border-[#27272a] pb-4">
+                    <div>
+                      <h3 className="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                        <Users className="w-4 h-4 text-[#D60303]" />
+                        <span>Graded vs Non-Graded Contestant Management</span>
+                      </h3>
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                        View and manually promote/demote contestants between Graded (ranked for awards) and Non-Graded cohorts.
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="relative">
+                        <Search className="w-4 h-4 absolute left-3 top-2.5 text-zinc-400" />
+                        <input
+                          type="text"
+                          value={cohortSearch}
+                          onChange={(e) => setCohortSearch(e.target.value)}
+                          placeholder="Search contestant..."
+                          className="pl-9 pr-3 py-1.5 bg-zinc-100 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-xl text-xs font-mono focus:outline-none focus:border-[#D60303]"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Filter Pills */}
+                  <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
+                    <button
+                      onClick={() => setCohortFilter('ALL')}
+                      className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer ${
+                        cohortFilter === 'ALL'
+                          ? 'bg-[#D60303] text-white shadow-xs'
+                          : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+                      }`}
+                    >
+                      All ({totalCount})
+                    </button>
+                    <button
+                      onClick={() => setCohortFilter('R2_GRADED')}
+                      className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer ${
+                        cohortFilter === 'R2_GRADED'
+                          ? 'bg-emerald-600 text-white shadow-xs'
+                          : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+                      }`}
+                    >
+                      R2 Graded ({r2Actual})
+                    </button>
+                    <button
+                      onClick={() => setCohortFilter('R2_NON_GRADED')}
+                      className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer ${
+                        cohortFilter === 'R2_NON_GRADED'
+                          ? 'bg-amber-600 text-white shadow-xs'
+                          : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+                      }`}
+                    >
+                      R2 Non-Graded ({r2NonGraded})
+                    </button>
+                    <button
+                      onClick={() => setCohortFilter('R3_GRADED')}
+                      className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer ${
+                        cohortFilter === 'R3_GRADED'
+                          ? 'bg-emerald-600 text-white shadow-xs'
+                          : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+                      }`}
+                    >
+                      R3 Graded ({r3Actual})
+                    </button>
+                    <button
+                      onClick={() => setCohortFilter('R3_NON_GRADED')}
+                      className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer ${
+                        cohortFilter === 'R3_NON_GRADED'
+                          ? 'bg-amber-600 text-white shadow-xs'
+                          : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+                      }`}
+                    >
+                      R3 Non-Graded ({r3NonGraded})
+                    </button>
+                    <button
+                      onClick={() => setCohortFilter('DISQUALIFIED')}
+                      className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer ${
+                        cohortFilter === 'DISQUALIFIED'
+                          ? 'bg-red-600 text-white shadow-xs'
+                          : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+                      }`}
+                    >
+                      Disqualified ({disqualifiedCount})
+                    </button>
+                  </div>
+
+                  {/* Table */}
+                  <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
+                    <table className="w-full text-left text-xs font-mono">
+                      <thead className="bg-zinc-100 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400">
+                        <tr>
+                          <th className="p-3">Contestant</th>
+                          <th className="p-3 text-center">Account Status</th>
+                          <th className="p-3 text-center">Round 1 (20M)</th>
+                          <th className="p-3 text-center">Round 2 Cohort (70%)</th>
+                          <th className="p-3 text-center">Round 2 (30M)</th>
+                          <th className="p-3 text-center">Round 3 Cohort (50%)</th>
+                          <th className="p-3 text-center">Round 3 (50M)</th>
+                          <th className="p-3 text-right">Grand Total</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
+                        {displayed.length === 0 ? (
+                          <tr>
+                            <td colSpan={8} className="p-6 text-center text-zinc-500">
+                              No contestants match the selected filter.
+                            </td>
+                          </tr>
+                        ) : (
+                          displayed.map((p) => {
+                            const isDisq = p.isDisqualified || p.accountStatus === 'DISQUALIFIED';
+                            const r1Score = p.round1Score ?? p.r1Score ?? 0;
+                            const r2Score = p.round2Score ?? p.r2Score ?? 0;
+                            const r3Score = p.round3Score ?? p.r3Score ?? 0;
+                            const totalScore = p.totalScore ?? p.total ?? 0;
+
+                            const r2Override = p.manualGradingOverrides?.round2;
+                            const r3Override = p.manualGradingOverrides?.round3;
+
+                            return (
+                              <tr key={p.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-900/50 transition">
+                                <td className="p-3">
+                                  <div className="font-bold text-zinc-900 dark:text-white">{p.name || p.id}</div>
+                                  <div className="text-[10px] text-zinc-500">{p.id} • {p.college} ({p.department})</div>
+                                </td>
+
+                                <td className="p-3 text-center">
+                                  {isDisq ? (
+                                    <div className="flex flex-col items-center gap-1">
+                                      <span className="px-2 py-0.5 rounded-full bg-red-600 text-white font-bold text-[10px]">
+                                        DISQUALIFIED
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleExecuteReinstate(p.id)}
+                                        className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] transition cursor-pointer flex items-center gap-1 shadow-xs"
+                                        title="Requalify & reinstate participant account"
+                                      >
+                                        <RotateCcw className="w-3 h-3" />
+                                        <span>Requalify</span>
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-bold text-[10px]">
+                                      ACTIVE
+                                    </span>
+                                  )}
+                                </td>
+
+                                <td className="p-3 text-center">
+                                  <div className="font-bold text-zinc-900 dark:text-white">{r1Score} / 20</div>
+                                  <div className="text-[10px] text-zinc-500">
+                                    {p.r1Completed ? '✓ Completed' : 'Pending'} • 100% Graded
+                                  </div>
+                                </td>
+
+                                <td className="p-3 text-center">
+                                  <div className="flex flex-col items-center gap-1.5">
+                                    <span className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] border ${
+                                      p.isRound2Graded
+                                        ? 'bg-emerald-500/15 text-emerald-600 border-emerald-500/30'
+                                        : 'bg-amber-500/15 text-amber-600 border-amber-500/30'
+                                    }`}>
+                                      {p.isRound2Graded ? '✓ Graded' : '◎ Non-Graded'}
+                                      {r2Override && ` (Manual)`}
+                                    </span>
+
+                                    <div className="flex items-center gap-1">
+                                      {p.isRound2Graded ? (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleToggleGradingOverride(p.id, 2, 'NON_GRADED')}
+                                          className="px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500 hover:text-white text-amber-700 dark:text-amber-400 font-bold text-[10px] transition cursor-pointer"
+                                          title="Demote to Non-Graded for Round 2"
+                                        >
+                                          Set Non-Graded
+                                        </button>
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleToggleGradingOverride(p.id, 2, 'GRADED')}
+                                          className="px-2 py-0.5 rounded bg-emerald-500/20 hover:bg-emerald-600 hover:text-white text-emerald-700 dark:text-emerald-400 font-bold text-[10px] transition cursor-pointer"
+                                          title="Promote to Graded for Round 2"
+                                        >
+                                          Set Graded
+                                        </button>
+                                      )}
+                                      {r2Override && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleToggleGradingOverride(p.id, 2, 'AUTO')}
+                                          className="px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-800 text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 text-[10px]"
+                                          title="Reset to automatic rank calculation"
+                                        >
+                                          Auto
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                </td>
+
+                                <td className="p-3 text-center">
+                                  <div className="font-bold text-zinc-900 dark:text-white">{r2Score} / 30</div>
+                                  <div className="text-[10px] text-zinc-500">
+                                    {p.r2Completed ? '✓ Completed' : 'Pending'}
+                                  </div>
+                                </td>
+
+                                <td className="p-3 text-center">
+                                  <div className="flex flex-col items-center gap-1.5">
+                                    <span className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] border ${
+                                      p.isRound3Graded
+                                        ? 'bg-emerald-500/15 text-emerald-600 border-emerald-500/30'
+                                        : 'bg-amber-500/15 text-amber-600 border-amber-500/30'
+                                    }`}>
+                                      {p.isRound3Graded ? '✓ Graded' : '◎ Non-Graded'}
+                                      {r3Override && ` (Manual)`}
+                                    </span>
+
+                                    <div className="flex items-center gap-1">
+                                      {p.isRound3Graded ? (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleToggleGradingOverride(p.id, 3, 'NON_GRADED')}
+                                          className="px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500 hover:text-white text-amber-700 dark:text-amber-400 font-bold text-[10px] transition cursor-pointer"
+                                          title="Demote to Non-Graded for Round 3"
+                                        >
+                                          Set Non-Graded
+                                        </button>
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleToggleGradingOverride(p.id, 3, 'GRADED')}
+                                          className="px-2 py-0.5 rounded bg-emerald-500/20 hover:bg-emerald-600 hover:text-white text-emerald-700 dark:text-emerald-400 font-bold text-[10px] transition cursor-pointer"
+                                          title="Promote to Graded for Round 3"
+                                        >
+                                          Set Graded
+                                        </button>
+                                      )}
+                                      {r3Override && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleToggleGradingOverride(p.id, 3, 'AUTO')}
+                                          className="px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-800 text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 text-[10px]"
+                                          title="Reset to automatic rank calculation"
+                                        >
+                                          Auto
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                </td>
+
+                                <td className="p-3 text-center">
+                                  <div className="font-bold text-zinc-900 dark:text-white">{r3Score} / 50</div>
+                                  <div className="text-[10px] text-zinc-500">
+                                    {p.r3Completed ? '✓ Completed' : 'Pending'}
+                                  </div>
+                                </td>
+
+                                <td className="p-3 text-right">
+                                  <div className="text-sm font-black text-[#D60303]">{totalScore} / 100</div>
+                                  <div className="text-[10px] text-zinc-500">Grand Total</div>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Tab: Malpractice & Disqualification Operations */}
+          {activeTab === 'malpractice' && (() => {
+            let filtered = [...malpracticeRecords];
+            if (malpracticeFilter === 'DISQUALIFIED') {
+              filtered = filtered.filter(r => r.isDisqualified);
+            } else if (malpracticeFilter === 'WARNINGS') {
+              filtered = filtered.filter(r => r.warningCount > 0 && !r.isDisqualified);
+            } else if (malpracticeFilter === 'MY_STATION') {
+              filtered = filtered.filter(r => r.assignedRound === currentUser?.assignedRound || r.assignedCoordinator === currentUser?.id);
+            }
+
+            if (malpracticeSearch.trim()) {
+              const q = malpracticeSearch.toLowerCase();
+              filtered = filtered.filter(r =>
+                r.id?.toLowerCase().includes(q) ||
+                r.name?.toLowerCase().includes(q) ||
+                r.college?.toLowerCase().includes(q) ||
+                r.assignedRound?.toLowerCase().includes(q)
+              );
+            }
+
+            const disqualifiedCount = malpracticeRecords.filter(r => r.isDisqualified).length;
+            const warnedCount = malpracticeRecords.filter(r => r.warningCount > 0 && !r.isDisqualified).length;
+
+            return (
+              <div className="space-y-6 animate-slide-up">
+                {/* Metric Summary Cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <div className="p-4 rounded-2xl bg-white dark:bg-[#141417] border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-1">
+                    <span className="text-[10px] font-mono uppercase text-zinc-500 font-bold block">Monitored Participants</span>
+                    <span className="text-2xl font-black font-mono text-zinc-900 dark:text-white">{malpracticeRecords.length}</span>
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 shadow-sm space-y-1">
+                    <span className="text-[10px] font-mono uppercase text-red-600 dark:text-red-400 font-bold block">Disqualified / Frozen</span>
+                    <span className="text-2xl font-black font-mono text-[#D60303]">{disqualifiedCount}</span>
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 shadow-sm space-y-1">
+                    <span className="text-[10px] font-mono uppercase text-amber-600 dark:text-amber-400 font-bold block">Active Warnings (&gt;0)</span>
+                    <span className="text-2xl font-black font-mono text-amber-600 dark:text-amber-400">{warnedCount}</span>
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-white dark:bg-[#141417] border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-1">
+                    <span className="text-[10px] font-mono uppercase text-zinc-500 font-bold block">Total Audit Logs</span>
+                    <span className="text-2xl font-black font-mono text-zinc-700 dark:text-zinc-300">{malpracticeLogs.length}</span>
+                  </div>
+                </div>
+
+                {malpracticeMsg && (
+                  <div className={`p-4 rounded-xl text-xs font-bold flex items-center justify-between animate-slide-up ${
+                    malpracticeMsg.type === 'success' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300'
+                  }`}>
+                    <span>{malpracticeMsg.text}</span>
+                    <button onClick={() => setMalpracticeMsg(null)} className="cursor-pointer text-xs font-mono">✕</button>
+                  </div>
+                )}
+
+                {/* Filter and Search Bar */}
+                <div className="bg-white/80 dark:bg-[#141417]/80 backdrop-blur-md p-5 rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80 shadow-sm space-y-4">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                    <div className="flex flex-wrap items-center gap-2 text-xs font-mono font-bold">
+                      <button
+                        onClick={() => setMalpracticeFilter('ALL')}
+                        className={`px-3 py-1.5 rounded-xl transition cursor-pointer ${
+                          malpracticeFilter === 'ALL'
+                            ? 'bg-[#D60303] text-white shadow-xs'
+                            : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200'
+                        }`}
+                      >
+                        All Contestants ({malpracticeRecords.length})
+                      </button>
+
+                      <button
+                        onClick={() => setMalpracticeFilter('DISQUALIFIED')}
+                        className={`px-3 py-1.5 rounded-xl transition cursor-pointer flex items-center gap-1.5 ${
+                          malpracticeFilter === 'DISQUALIFIED'
+                            ? 'bg-red-600 text-white shadow-xs'
+                            : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200'
+                        }`}
+                      >
+                        <UserX className="w-3.5 h-3.5" />
+                        <span>Disqualified ({disqualifiedCount})</span>
+                      </button>
+
+                      <button
+                        onClick={() => setMalpracticeFilter('WARNINGS')}
+                        className={`px-3 py-1.5 rounded-xl transition cursor-pointer flex items-center gap-1.5 ${
+                          malpracticeFilter === 'WARNINGS'
+                            ? 'bg-amber-600 text-white shadow-xs'
+                            : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200'
+                        }`}
+                      >
+                        <AlertTriangle className="w-3.5 h-3.5" />
+                        <span>Warnings ({warnedCount})</span>
+                      </button>
+
+                      <button
+                        onClick={() => setMalpracticeFilter('MY_STATION')}
+                        className={`px-3 py-1.5 rounded-xl transition cursor-pointer flex items-center gap-1.5 ${
+                          malpracticeFilter === 'MY_STATION'
+                            ? 'bg-purple-600 text-white shadow-xs'
+                            : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200'
+                        }`}
+                      >
+                        <span>My Lab Station</span>
+                      </button>
+                    </div>
+
+                    <div className="relative w-full sm:w-72">
+                      <Search className="w-4 h-4 absolute left-3 top-2.5 text-zinc-400" />
+                      <input
+                        type="text"
+                        placeholder="Search contestant ID, name..."
+                        value={malpracticeSearch}
+                        onChange={(e) => setMalpracticeSearch(e.target.value)}
+                        className="w-full pl-9 pr-4 py-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-xs font-mono focus:border-[#D60303] focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Malpractice Participant Table */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-[#595959] dark:bg-zinc-900 text-white font-mono">
+                        <tr>
+                          <th className="p-3">ID</th>
+                          <th className="p-3">Participant Name</th>
+                          <th className="p-3">Assigned Station</th>
+                          <th className="p-3 text-center">Warnings</th>
+                          <th className="p-3 text-center">Account Status</th>
+                          <th className="p-3 text-center">Disqualification / Malpractice Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800 text-zinc-800 dark:text-zinc-200">
+                        {filtered.length === 0 ? (
+                          <tr>
+                            <td colSpan="6" className="p-8 text-center text-zinc-500 font-mono">
+                              No participants matching the selected malpractice filter.
+                            </td>
+                          </tr>
+                        ) : (
+                          filtered.map(p => {
+                            const isDisq = p.isDisqualified || p.accountStatus === 'DISQUALIFIED';
+                            return (
+                              <tr key={p.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-900/50 transition-colors">
+                                <td className="p-3 font-mono font-bold text-[#D60303]">{p.id}</td>
+                                <td className="p-3">
+                                  <div className="font-semibold">{p.name}</div>
+                                  <div className="text-[10px] text-zinc-500">{p.college}</div>
+                                </td>
+                                <td className="p-3 font-mono text-[11px]">
+                                  <span className="px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700">
+                                    {p.assignedRound || 'Lab Terminal 1'}
+                                  </span>
+                                </td>
+                                <td className="p-3 text-center font-mono">
+                                  <span className={`px-2 py-0.5 rounded-full font-bold text-[11px] ${
+                                    p.warningCount >= 3 ? 'bg-red-500/20 text-red-500 border border-red-500/40' :
+                                    p.warningCount > 0 ? 'bg-amber-500/20 text-amber-500 border border-amber-500/40' :
+                                    'bg-emerald-500/20 text-emerald-500 border border-emerald-500/40'
+                                  }`}>
+                                    {p.warningCount || 0} / 3 Warnings
+                                  </span>
+                                </td>
+                                <td className="p-3 text-center">
+                                  {isDisq ? (
+                                    <span className="px-2.5 py-1 rounded-full bg-red-600 text-white font-mono font-bold text-[10px] flex items-center justify-center gap-1 mx-auto w-fit shadow-xs">
+                                      <UserX className="w-3 h-3" /> DISQUALIFIED
+                                    </span>
+                                  ) : (
+                                    <span className="px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-mono font-bold text-[10px]">
+                                      ACTIVE
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="p-3 text-center">
+                                  <div className="flex items-center justify-center gap-2 font-mono text-xs">
+                                    {isDisq ? (
+                                      <button
+                                        onClick={() => handleExecuteReinstate(p.id)}
+                                        disabled={isProcessingMalpractice}
+                                        className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold transition cursor-pointer flex items-center gap-1.5 shadow-xs"
+                                        title="Restore contestant access to active tournament"
+                                      >
+                                        <RotateCcw className="w-3.5 h-3.5" />
+                                        <span>Reinstate Access</span>
+                                      </button>
+                                    ) : (
+                                      <>
+                                        <button
+                                          onClick={() => handleIssueWarning(p.id)}
+                                          className="px-2.5 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500 text-amber-700 hover:text-white border border-amber-500/30 font-bold transition cursor-pointer flex items-center gap-1"
+                                          title="Record malpractice warning without instant disqualification"
+                                        >
+                                          <AlertTriangle className="w-3.5 h-3.5" />
+                                          <span>Warn</span>
+                                        </button>
+
+                                        <button
+                                          onClick={() => {
+                                            setDisqualifyingParticipant(p);
+                                            setDisqualifyReason('Tab Switching / Background Process');
+                                            setCustomReason('');
+                                          }}
+                                          className="px-3 py-1.5 rounded-lg bg-[#D60303] hover:bg-[#b00202] text-white font-bold transition cursor-pointer flex items-center gap-1.5 shadow-xs"
+                                          title="Instantly freeze and disqualify contestant for malpractice"
+                                        >
+                                          <ShieldAlert className="w-3.5 h-3.5" />
+                                          <span>Disqualify</span>
+                                        </button>
+                                      </>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Real-Time Telemetry Audit Stream */}
+                <div className="bg-white/80 dark:bg-[#141417]/80 backdrop-blur-md p-5 rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80 shadow-sm space-y-3">
+                  <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-2">
+                    <h4 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider font-mono flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-[#D60303]" />
+                      <span>Live Anti-Cheat Telemetry Audit Feed</span>
+                    </h4>
+                    <span className="text-[10px] font-mono text-zinc-400">Latest 100 System Events</span>
+                  </div>
+
+                  <div className="max-h-56 overflow-y-auto space-y-2 pr-1 font-mono text-[11px]">
+                    {malpracticeLogs.length === 0 ? (
+                      <p className="text-zinc-500 text-center py-4">No anti-cheat infractions recorded yet.</p>
+                    ) : (
+                      malpracticeLogs.map((log, idx) => (
+                        <div key={log.id || idx} className="p-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2 truncate">
+                            <span className={`px-2 py-0.5 rounded font-bold text-[10px] ${
+                              log.type?.includes('DISQUALIF') ? 'bg-red-500 text-white' :
+                              log.type?.includes('WARNING') ? 'bg-amber-500/20 text-amber-600' :
+                              'bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300'
+                            }`}>
+                              {log.type}
+                            </span>
+                            <span className="font-bold text-[#D60303]">{log.participantId}:</span>
+                            <span className="text-zinc-700 dark:text-zinc-300 truncate">{log.message}</span>
+                          </div>
+                          <span className="text-[10px] text-zinc-400 shrink-0">{log.timestamp}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {/* Disqualification Reason Modal */}
+                {disqualifyingParticipant && (
+                  <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+                    <div className="bg-white dark:bg-[#141417] p-6 rounded-3xl border-2 border-red-600 shadow-2xl max-w-lg w-full space-y-5 animate-slide-up">
+                      <div className="flex items-start gap-3">
+                        <div className="p-3 rounded-2xl bg-red-500/10 text-red-600 shrink-0">
+                          <ShieldAlert className="w-8 h-8" />
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-bold text-zinc-900 dark:text-white">
+                            Disqualify Participant: {disqualifyingParticipant.id}
+                          </h3>
+                          <p className="text-xs text-zinc-500">
+                            Contestant: {disqualifyingParticipant.name} ({disqualifyingParticipant.college})
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3 text-xs">
+                        <label className="block font-bold text-zinc-700 dark:text-zinc-300">Select Malpractice Violation Reason:</label>
+                        <select
+                          value={disqualifyReason}
+                          onChange={(e) => setDisqualifyReason(e.target.value)}
+                          className="w-full p-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 font-mono text-xs focus:border-red-600 focus:outline-none"
+                        >
+                          <option value="Tab Switching / Background Process">Tab Switching / Background Browser Window</option>
+                          <option value="Unauthorized Electronic Device / Mobile">Unauthorized Electronic Device / Mobile Usage</option>
+                          <option value="Screen Sharing / External Assistance">Screen Sharing / External Chat Assistance</option>
+                          <option value="Code Plagiarism / Solution Sharing">Code Plagiarism / Unauthorized Code Copying</option>
+                          <option value="Physical Lab Misconduct">Physical Misconduct / Disobeying Lab Protocol</option>
+                          <option value="Exceeded Anti-Cheat Violation Threshold">Exceeded 3 Anti-Cheat Warnings Threshold</option>
+                          <option value="OTHER">Custom Reason...</option>
+                        </select>
+
+                        {disqualifyReason === 'OTHER' && (
+                          <textarea
+                            rows={3}
+                            placeholder="Enter specific malpractice violation details..."
+                            value={customReason}
+                            onChange={(e) => setCustomReason(e.target.value)}
+                            className="w-full p-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 font-mono text-xs focus:border-red-600 focus:outline-none"
+                          />
+                        )}
+
+                        <p className="text-[11px] text-red-600 dark:text-red-400 font-medium">
+                          ⚠️ Disqualifying will immediately freeze their tournament workstation, set their accountStatus to DISQUALIFIED, nullify scores, and record an audit log.
+                        </p>
+                      </div>
+
+                      <div className="flex items-center justify-end gap-3 pt-2 font-mono text-xs font-bold">
+                        <button
+                          type="button"
+                          onClick={() => setDisqualifyingParticipant(null)}
+                          className="px-4 py-2 rounded-xl bg-zinc-200 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-300 cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleExecuteDisqualify}
+                          disabled={isProcessingMalpractice}
+                          className="px-5 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white cursor-pointer shadow-md flex items-center gap-1.5"
+                        >
+                          <UserX className="w-4 h-4" />
+                          <span>{isProcessingMalpractice ? 'Freezing...' : 'Confirm Disqualification'}</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
           {/* Tab 3: Broadcast Announcements (Coordinator) */}
           {activeTab === 'announcements' && (
             <div className="space-y-6 animate-slide-up">
@@ -1030,7 +2240,7 @@ export default function CoordinatorPortal() {
                             </span>
                             <h4 className="text-xs font-bold text-zinc-900 dark:text-white font-mono">{ann.title}</h4>
                           </div>
-                          <span className="text-[10px] font-mono text-zinc-500">{ann.time || 'Just now'}</span>
+                          <span className="text-[10px] font-mono text-zinc-500">{formatAnnouncementTime(ann)}</span>
                         </div>
                         <p className="text-xs text-zinc-700 dark:text-zinc-300 leading-relaxed font-sans">{ann.message}</p>
                       </div>
@@ -1051,7 +2261,7 @@ export default function CoordinatorPortal() {
           {/* Tab 5: Live Competition Leaderboard & Mark Grading */}
           {activeTab === 'leaderboard' && (() => {
             const isAllRoundsEnded = ['COMPLETED', 'ROUND_3_ENDED'].includes(eventState?.status);
-            const showCalculations = isAllRoundsEnded || previewCalculations;
+            const showCalculations = true;
 
             const r1Cutoff = eventState?.round1QualifyCount || Math.ceil((leaderboard.length || 1) * 0.8);
             const r2Cutoff = eventState?.round2QualifyCount || Math.ceil((leaderboard.length || 1) * 0.5);
@@ -1115,140 +2325,63 @@ export default function CoordinatorPortal() {
             return (
               <div className="space-y-6 animate-slide-up">
                 {/* Status Bar */}
-                {!showCalculations ? (
-                  <div className="bg-amber-500/10 dark:bg-amber-500/5 border-2 border-amber-500/30 rounded-2xl p-6 text-zinc-900 dark:text-zinc-100 space-y-4">
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                      <div className="flex items-start gap-3">
-                        <div className="p-3 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400">
-                          <Lock className="w-6 h-6" />
-                        </div>
-                        <div>
-                          <h3 className="text-base font-bold flex items-center gap-2">
-                            <span>Official Mark Grading Locked Until All 3 Rounds Conclude</span>
-                            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300">
-                              STATUS: {eventState?.status || 'IN_PROGRESS'}
-                            </span>
-                          </h3>
-                          <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1 max-w-3xl leading-relaxed">
-                            In accordance with official Festronix 2k26 competition rubrics, comprehensive mark grading, cohort classification (Top 80% R1 → R2, Top 50% R2 → R3), and Master Tie-Breaking hierarchy calculations are executed only after all 3 rounds end.
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-2 font-mono text-xs">
-                        <button
-                          onClick={() => {
-                            handleSetRoundStatus('COMPLETED', 3);
-                            fetchLeaderboard();
-                          }}
-                          className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold transition cursor-pointer btn-interactive flex items-center gap-2 shadow-xs"
-                        >
-                          <Trophy className="w-4 h-4 text-amber-300" />
-                          <span>🏁 Conclude All 3 Rounds & Run Calculation</span>
-                        </button>
-
-                        <button
-                          onClick={() => setPreviewCalculations(true)}
-                          className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-900 text-zinc-200 border border-zinc-700 font-bold transition cursor-pointer btn-interactive flex items-center gap-2"
-                        >
-                          <Eye className="w-4 h-4 text-amber-400" />
-                          <span>👁️ Preview Live Calculations</span>
-                        </button>
-                      </div>
+                <div className="bg-emerald-500/10 dark:bg-emerald-500/5 border-2 border-emerald-500/30 rounded-2xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 text-zinc-900 dark:text-zinc-100 shadow-sm">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 rounded-xl bg-emerald-500/20 text-emerald-600 dark:text-emerald-400">
+                      <Sparkles className="w-5 h-5 animate-spin-slow" />
                     </div>
-
-                    {/* Rubrics Preview Specification Cards */}
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3 pt-2">
-                      <div className="p-4 rounded-xl bg-white dark:bg-[#141417] border border-zinc-200 dark:border-zinc-800">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-mono font-bold text-[#D60303]">ROUND 1 (DECODE)</span>
-                          <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800">20 Marks</span>
-                        </div>
-                        <p className="text-[11px] text-zinc-600 dark:text-zinc-400 mt-2">20 MCQs, 1 mark each, auto-graded. Conceptual Accuracy & Speed across 10 domains.</p>
-                        <div className="mt-2 text-[10px] font-mono space-y-1 text-zinc-500">
-                          <div>• Excellent: 16–20 pts</div>
-                          <div>• Good: 10–15 pts</div>
-                          <div>• Poor: &lt;10 pts</div>
-                        </div>
-                      </div>
-
-                      <div className="p-4 rounded-xl bg-white dark:bg-[#141417] border border-zinc-200 dark:border-zinc-800">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-mono font-bold text-[#D60303]">ROUND 2 (DEBUG IT)</span>
-                          <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800">30 Marks</span>
-                        </div>
-                        <p className="text-[11px] text-zinc-600 dark:text-zinc-400 mt-2">3 problems × 10 marks coordinator-evaluated. Logic (4M) + Output (3M) + Quality (2M) + Viva (1M).</p>
-                        <div className="mt-2 text-[10px] font-mono space-y-1 text-zinc-500">
-                          <div>• Excellent: 24–30 pts</div>
-                          <div>• Good: 15–23.5 pts</div>
-                          <div>• Poor: &lt;15 pts</div>
-                        </div>
-                      </div>
-
-                      <div className="p-4 rounded-xl bg-white dark:bg-[#141417] border border-zinc-200 dark:border-zinc-800">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-mono font-bold text-[#D60303]">ROUND 3 (TECH HUNT)</span>
-                          <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800">50 Marks</span>
-                        </div>
-                        <p className="text-[11px] text-zinc-600 dark:text-zinc-400 mt-2">5 sequential stations × 10 marks. Hint reveal carries −2 mark penalty on that station.</p>
-                        <div className="mt-2 text-[10px] font-mono space-y-1 text-zinc-500">
-                          <div>• Excellent: 40–50 pts</div>
-                          <div>• Good: 25–39 pts</div>
-                          <div>• Poor: &lt;25 pts</div>
-                        </div>
-                      </div>
-
-                      <div className="p-4 rounded-xl bg-white dark:bg-[#141417] border border-[#D60303]/40 bg-[#D60303]/5">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-mono font-bold text-[#D60303]">GRAND TOTAL & PODIUM</span>
-                          <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-[#D60303] text-white">100 Marks</span>
-                        </div>
-                        <p className="text-[11px] text-zinc-600 dark:text-zinc-400 mt-2">R1 (20) + R2 (30) + R3 (50). Cohorts: Top 80% (R1 → R2), Top 50% (R2 → R3).</p>
-                        <div className="mt-2 text-[10px] font-mono space-y-1 text-zinc-500">
-                          <div>• Master Tie-Breaker Hierarchy:</div>
-                          <div>Total → R2 Score → Fewer R3 Hints → R3 Time → R1 Time</div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="bg-emerald-500/10 dark:bg-emerald-500/5 border-2 border-emerald-500/30 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-zinc-900 dark:text-zinc-100">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2.5 rounded-xl bg-emerald-500/20 text-emerald-600 dark:text-emerald-400">
-                        <CheckCircle2 className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <h4 className="text-sm font-bold flex items-center gap-2">
-                          <span>{isAllRoundsEnded ? '✅ All 3 Rounds Concluded — Official Mark Grading & Podium Standings Computed by System' : '⚠️ Live Mark Grading Preview Active'}</span>
-                          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300">
-                            {eventState?.status}
+                    <div>
+                      <h4 className="text-sm font-bold flex items-center gap-2">
+                        <span>{isAllRoundsEnded ? '✅ All 3 Rounds Concluded — Official Final Standings' : '⚡ Live Real-Time Mark Grading & Standings Active'}</span>
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300">
+                          {eventState?.status}
+                        </span>
+                        {eventState?.status?.includes('RUNNING') && (
+                          <span className="text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-emerald-600 text-white flex items-center gap-1 animate-pulse">
+                            <Clock className="w-3 h-3" />
+                            {formatRoundTime(roundTimeLeft)}
                           </span>
-                        </h4>
-                        <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5">
-                          Calculations completed across all 3 rounds (Grand Total: 100 Marks) using the Master Tie-Breaking Hierarchy.
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 font-mono text-xs">
-                      {previewCalculations && !isAllRoundsEnded && (
-                        <button
-                          onClick={() => setPreviewCalculations(false)}
-                          className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white font-bold transition cursor-pointer"
-                        >
-                          Lock Calculations View
-                        </button>
-                      )}
-                      <button
-                        onClick={fetchLeaderboard}
-                        className="px-3 py-1.5 rounded-lg bg-[#D60303] hover:bg-[#b00202] text-white font-bold transition cursor-pointer flex items-center gap-1.5"
-                      >
-                        <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                        <span>↻ Refresh Calculations</span>
-                      </button>
+                        )}
+                      </h4>
+                      <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5">
+                        Live dynamic calculations across all active rounds (Grand Total: 100 Marks) using the Master Tie-Breaking Hierarchy.
+                      </p>
                     </div>
                   </div>
-                )}
+
+                  <div className="flex flex-wrap items-center gap-2 font-mono text-xs">
+                    <button
+                      onClick={async () => {
+                        await recalculateLeaderboard();
+                        await fetchLeaderboard();
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold transition cursor-pointer flex items-center gap-1.5 shadow-xs"
+                      title="Trigger immediate live re-evaluation of scores across all rounds"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                      <span>⚡ Recalculate Live Scores</span>
+                    </button>
+                    <button
+                      onClick={fetchLeaderboard}
+                      className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white font-bold transition cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-zinc-400" />
+                      <span>↻ Refresh Standings</span>
+                    </button>
+                    {!isAllRoundsEnded && (
+                      <button
+                        onClick={() => {
+                          handleSetRoundStatus('COMPLETED', 3);
+                          fetchLeaderboard();
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-bold transition cursor-pointer flex items-center gap-1.5"
+                      >
+                        <Trophy className="w-3.5 h-3.5 text-amber-300" />
+                        <span>Conclude Rounds</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
 
                 {/* Rubrics Performance Attainment Summary */}
                 {showCalculations && (

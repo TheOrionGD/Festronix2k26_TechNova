@@ -12,7 +12,9 @@ import {
   Lock,
   Trophy,
   Sparkles,
-  SkipForward
+  SkipForward,
+  Clock,
+  ArrowLeft
 } from 'lucide-react';
 
 export default function Round3Hunt() {
@@ -23,11 +25,15 @@ export default function Round3Hunt() {
     requestFullScreen, 
     isOffline, 
     leaderboard, 
-    isRoundUnlocked, 
+    isRoundUnlocked,
+    isRoundCompletedByUser,
+    markRoundCompletedByUser,
     eventState,
     warningCount,
     isOfflineReconnectionEligible,
-    isDisqualified
+    isDisqualified,
+    roundTimeLeft,
+    formatRoundTime
   } = useApp();
 
   const [isFullscreenActive, setIsFullscreenActive] = useState(
@@ -79,6 +85,9 @@ export default function Round3Hunt() {
 
       if (checkData.success && checkData.hasAttempt) {
         setIsCompleted(checkData.isCompleted || false);
+        if (checkData.isCompleted) {
+          markRoundCompletedByUser(3);
+        }
         setScore(checkData.score || 0);
         setCurrentStep(checkData.currentStep || 1);
         setTotalSteps(checkData.totalSteps || 5);
@@ -114,6 +123,9 @@ export default function Round3Hunt() {
         setSkippedClueIds(startData.skippedClueIds || []);
         setScore(startData.score || 0);
         setIsCompleted(startData.isCompleted || false);
+        if (startData.isCompleted) {
+          markRoundCompletedByUser(3);
+        }
         if (startData.gradingStatus) {
           setGradingStatus(startData.gradingStatus);
         }
@@ -173,6 +185,7 @@ export default function Round3Hunt() {
 
         if (data.isCompleted) {
           setIsCompleted(true);
+          markRoundCompletedByUser(3);
           setScore(data.score);
           if (data.solvedClueIds) setSolvedClueIds(data.solvedClueIds);
           if (data.skippedClueIds) setSkippedClueIds(data.skippedClueIds);
@@ -225,6 +238,7 @@ export default function Round3Hunt() {
 
         if (data.isCompleted) {
           setIsCompleted(true);
+          markRoundCompletedByUser(3);
           setScore(data.score);
           if (data.solvedClueIds) setSolvedClueIds(data.solvedClueIds);
           if (data.skippedClueIds) setSkippedClueIds(data.skippedClueIds);
@@ -264,6 +278,53 @@ export default function Round3Hunt() {
       console.error('Request hint error:', err);
     }
   };
+
+  if (isRoundCompletedByUser(3)) {
+    return (
+      <div className="min-h-screen bg-transparent text-[#595959] dark:text-[#f4f4f5] flex flex-col transition-colors duration-200">
+        <Header />
+        <div className="flex flex-1">
+          <Sidebar />
+          <main className="flex-1 p-6 flex items-center justify-center">
+            <div className="bg-white/80 dark:bg-[#141417]/90 backdrop-blur-md p-8 rounded-3xl border border-emerald-500/50 shadow-2xl max-w-lg w-full text-center space-y-5 animate-slide-up card-border-glow">
+              <div className="w-16 h-16 rounded-3xl bg-emerald-500/10 border-2 border-emerald-500/40 text-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-500/10 mx-auto">
+                <CheckCircle2 className="w-8 h-8" />
+              </div>
+              <div className="space-y-1.5">
+                <span className="text-xs font-mono font-bold text-emerald-600 uppercase tracking-widest block">
+                  ROUND 3 COMPLETE & LOCKED
+                </span>
+                <h2 className="text-xl font-black text-zinc-900 dark:text-white">
+                  Tech Hunt Course Concluded
+                </h2>
+                <p className="text-xs text-zinc-600 dark:text-[#a1a1aa] leading-relaxed">
+                  You have completed Round 3 (Tech Hunt). In accordance with competition regulations, completed rounds cannot be re-entered.
+                </p>
+              </div>
+
+              <div className="p-4 bg-zinc-100 dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 text-xs font-mono space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-zinc-500">Round 3 Score:</span>
+                  <span className="font-bold text-emerald-600">{currentUser?.round3Score ?? score ?? 0} / 50 pts</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-zinc-500">Grading Status:</span>
+                  <span className="font-bold capitalize">{gradingStatus || (currentUser?.isRound3Graded ? 'Graded' : 'Non-Graded')}</span>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setCurrentScreen('dashboard')}
+                className="w-full py-3 rounded-xl bg-[#D60303] hover:bg-[#A30B1A] text-white text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer shadow-md btn-interactive"
+              >
+                <span>Return to Participant Dashboard</span>
+              </button>
+            </div>
+          </main>
+        </div>
+      </div>
+    );
+  }
 
   if (!isRoundUnlocked(3)) {
     return (
@@ -335,9 +396,24 @@ export default function Round3Hunt() {
               )}
             </div>
 
-            <div className="flex items-center gap-2 font-mono text-xs">
+            <div className="flex flex-wrap items-center gap-2 font-mono text-xs">
+              <button
+                onClick={() => setCurrentScreen('dashboard')}
+                className="px-3 py-1 rounded-xl bg-zinc-100 dark:bg-zinc-800 hover:bg-[#D60303] hover:text-white text-zinc-700 dark:text-zinc-200 border border-zinc-300 dark:border-zinc-700 font-mono text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs btn-interactive"
+                title="Return to Participant Dashboard"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Dashboard</span>
+              </button>
+
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 font-mono text-xs font-bold shadow-xs">
+                <Clock className={`w-3.5 h-3.5 ${roundTimeLeft < 300 ? 'text-[#D60303] animate-pulse' : 'text-[#D60303]'}`} />
+                <span className={roundTimeLeft < 300 ? 'text-[#D60303] font-black animate-bounce' : 'text-zinc-800 dark:text-zinc-100'}>
+                  {formatRoundTime(roundTimeLeft)}
+                </span>
+              </div>
               <span className={`px-2.5 py-1 rounded-full text-[10px] font-mono font-bold border ${warningCount > 0 ? 'bg-amber-500/10 text-amber-600 border-amber-500/30' : 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30'}`}>
-                Anti-Cheat Warnings: {warningCount || 0}/3
+                Warnings: {warningCount || 0}/3
               </span>
               <span className="px-3 py-1 rounded-full bg-[#A30B1A] text-white font-bold shadow-2xs">
                 SCORE: {score} PTS
@@ -407,21 +483,30 @@ export default function Round3Hunt() {
                   </div>
                 </div>
 
-                {leaderboard && leaderboard.length > 0 && (
-                  <div className="p-4 bg-zinc-50 dark:bg-[#09090b] rounded-2xl border border-zinc-200 dark:border-[#27272a] text-left space-y-2 font-mono text-xs">
-                    <span className="font-bold text-zinc-900 dark:text-white flex items-center gap-1">
-                      <Sparkles className="w-3.5 h-3.5 text-amber-500" /> Live Symposium Standings
-                    </span>
-                    <div className="space-y-1">
-                      {leaderboard.slice(0, 3).map((item, idx) => (
-                        <div key={item.id || idx} className="flex justify-between items-center text-[11px]">
-                          <span>#{idx + 1} {item.name || item.id}</span>
-                          <span className="font-bold text-[#D60303]">{item.totalScore || 0} pts</span>
-                        </div>
-                      ))}
+                {/* Contestant Official Performance Scorecard (Private, no public leaderboard for participants) */}
+                <div className="p-4 bg-zinc-50 dark:bg-[#09090b] rounded-2xl border border-zinc-200 dark:border-[#27272a] text-left space-y-2.5 font-mono text-xs">
+                  <span className="font-bold text-zinc-900 dark:text-white flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-500" /> Contestant Performance Summary
+                  </span>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                    <div className="p-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-center">
+                      <div className="text-[10px] text-zinc-500 uppercase">Round 1</div>
+                      <div className="text-sm font-bold text-zinc-900 dark:text-white">{currentUser?.round1Score ?? 0} / 20</div>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-center">
+                      <div className="text-[10px] text-zinc-500 uppercase">Round 2</div>
+                      <div className="text-sm font-bold text-zinc-900 dark:text-white">{currentUser?.round2Score ?? 0} / 30</div>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-center">
+                      <div className="text-[10px] text-zinc-500 uppercase">Round 3</div>
+                      <div className="text-sm font-bold text-[#D60303]">{currentUser?.round3Score ?? score ?? 0} / 50</div>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 text-center">
+                      <div className="text-[10px] text-red-600 uppercase font-bold">Total</div>
+                      <div className="text-sm font-black text-[#D60303]">{(currentUser?.round1Score ?? 0) + (currentUser?.round2Score ?? 0) + (currentUser?.round3Score ?? score ?? 0)} / 100</div>
                     </div>
                   </div>
-                )}
+                </div>
 
                 <div className="pt-2 flex justify-center gap-3">
                   <button

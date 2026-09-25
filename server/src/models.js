@@ -14,6 +14,7 @@ const userSchema = new mongoose.Schema({
   assignedRound: { type: String, default: '' },
   assignedCoordinator: { type: String, default: '' },
   pin: { type: String, default: '' },
+  manualGradingOverrides: { type: mongoose.Schema.Types.Mixed, default: {} }, // e.g. { round2: 'graded' | 'non_graded', round3: 'graded' | 'non_graded' }
   permissions: [{ type: String }] // e.g. MANAGE_QUESTIONS, MANAGE_DEBUG_PROBLEMS, MANAGE_CLUES
 }, { timestamps: true });
 
@@ -21,8 +22,16 @@ const userSchema = new mongoose.Schema({
 const eventStateSchema = new mongoose.Schema({
   status: { type: String, default: 'REGISTRATION' }, // REGISTRATION | ROUND_1_READY | ROUND_1_RUNNING | ROUND_1_ENDED | ROUND_2_READY | ROUND_2_RUNNING | ROUND_2_ENDED | ROUND_3_READY | ROUND_3_RUNNING | COMPLETED
   round1MaxQuestions: { type: Number, default: 20 },
-  round1DurationMinutes: { type: Number, default: 20 },
+  round1DurationMinutes: { type: Number, default: 10 },
+  round2DurationMinutes: { type: Number, default: 15 },
+  round3DurationMinutes: { type: Number, default: 15 },
+  roundStartedAt: { type: Date, default: null },
+  roundEndsAt: { type: Date, default: null },
+  round1QualifyMode: { type: String, enum: ['PERCENTAGE', 'COUNT'], default: 'PERCENTAGE' },
+  round1QualifyPercentage: { type: Number, default: 70 }, // 70% of R1 participants advance to R2 as graded
   round1QualifyCount: { type: Number, default: 30 },
+  round2QualifyMode: { type: String, enum: ['PERCENTAGE', 'COUNT'], default: 'PERCENTAGE' },
+  round2QualifyPercentage: { type: Number, default: 50 }, // 50% of R2 participants advance to R3 as graded
   round2QualifyCount: { type: Number, default: 10 },
   round3StationCount: { type: Number, default: 5 },
   registrationCount: { type: Number, default: 0 },
@@ -38,16 +47,15 @@ const eventStateSchema = new mongoose.Schema({
       'Government College of Engineering'
     ] 
   },
-  // ─── NEW: Per-round grading percentage configuration ─────────────────────────
-  // gradingPercentage: the % of ranked participants who are "officially graded" in that round.
-  // 100 = all participants are graded (Round 1 default)
-  // 80  = top 80% by R1 leaderboard are graded in Round 2, remaining 20% are non_graded
+  // ─── Per-round grading percentage configuration ─────────────────────────
+  // 100 = 100% of participants are graded in Round 1
+  // 70  = top 70% by R1 leaderboard are graded in Round 2, remaining 30% are non_graded
   // 50  = top 50% by R2 leaderboard are graded in Round 3, remaining 50% are non_graded
   roundGradingConfig: {
     type: mongoose.Schema.Types.Mixed,
     default: {
       1: { gradingPercentage: 100 },
-      2: { gradingPercentage: 80 },
+      2: { gradingPercentage: 70 },
       3: { gradingPercentage: 50 }
     }
   }

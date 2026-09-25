@@ -18,7 +18,8 @@ import {
   Edit3,
   X,
   KeyRound,
-  Sparkles
+  Sparkles,
+  Clock
 } from 'lucide-react';
 
 export default function AdminPortal() {
@@ -29,7 +30,10 @@ export default function AdminPortal() {
     leaderboard,
     fetchLeaderboard,
     questions,
-    fetchQuestions
+    fetchQuestions,
+    roundTimeLeft,
+    formatRoundTime,
+    recalculateLeaderboard
   } = useApp();
 
   const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'coordinators' | 'qualifications' | 'questions' | 'audit'
@@ -250,6 +254,12 @@ export default function AdminPortal() {
             </div>
 
             <div className="flex items-center gap-2 font-mono text-xs">
+              {eventState?.status?.includes('RUNNING') && (
+                <span className="px-3 py-1 rounded-full bg-emerald-600 text-white font-bold flex items-center gap-1.5 shadow-sm animate-pulse">
+                  <Clock className="w-3.5 h-3.5" />
+                  LIVE TIMER: {formatRoundTime(roundTimeLeft)}
+                </span>
+              )}
               <span className="px-3 py-1 rounded-full bg-[#A30B1A] text-[#EFEEEA] font-bold shadow-2xs">
                 STATE: {eventState.status}
               </span>
@@ -670,12 +680,29 @@ export default function AdminPortal() {
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {eventState?.status?.includes('RUNNING') && (
+                      <span className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white font-mono text-xs font-bold flex items-center gap-1.5 shadow-sm animate-pulse">
+                        <Clock className="w-3.5 h-3.5" />
+                        LIVE: {formatRoundTime(roundTimeLeft)}
+                      </span>
+                    )}
+                    <button
+                      onClick={async () => {
+                        await recalculateLeaderboard();
+                        await fetchLeaderboard();
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold font-mono transition cursor-pointer btn-interactive flex items-center gap-1.5 shadow-xs"
+                      title="Trigger immediate live score recalculation across all rounds"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                      <span>⚡ Recalculate Live</span>
+                    </button>
                     <button
                       onClick={fetchLeaderboard}
                       className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-[#D60303] text-white text-xs font-bold font-mono transition cursor-pointer btn-interactive flex items-center gap-1.5 shadow-xs"
                     >
-                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                      <Sparkles className="w-3.5 h-3.5 text-zinc-400" />
                       <span>↻ Refresh Scores</span>
                     </button>
                   </div>

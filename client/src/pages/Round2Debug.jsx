@@ -12,7 +12,8 @@ import {
   AlertTriangle,
   Award,
   Terminal,
-  Lock
+  Lock,
+  ArrowLeft
 } from 'lucide-react';
 
 export default function Round2Debug() {
@@ -24,10 +25,13 @@ export default function Round2Debug() {
     isOffline, 
     leaderboard,
     isRoundUnlocked,
+    isRoundCompletedByUser,
+    markRoundCompletedByUser,
     setCurrentScreen,
     eventState,
     warningCount,
-    requestFullScreen
+    roundTimeLeft,
+    formatRoundTime
   } = useApp();
 
   const [problems, setProblems] = useState([]);
@@ -90,12 +94,8 @@ export default function Round2Debug() {
       }
     };
 
-    if (typeof requestFullScreen === 'function') {
-      requestFullScreen();
-    }
-
     initDebug();
-  }, [currentUser, requestFullScreen]);
+  }, [currentUser]);
 
   const [allDebugBank, setAllDebugBank] = useState([]);
   const [selectedBonusLang, setSelectedBonusLang] = useState('Python');
@@ -193,6 +193,53 @@ export default function Round2Debug() {
 
   const subState = displayedProblem ? (mergedSubmissions[displayedProblem.problemId] || { status: 'NOT_STARTED' }) : { status: 'NOT_STARTED' };
 
+  if (isRoundCompletedByUser(2)) {
+    return (
+      <div className="min-h-screen bg-transparent text-[#595959] dark:text-[#f4f4f5] flex flex-col transition-colors duration-200">
+        <Header />
+        <div className="flex flex-1">
+          <Sidebar />
+          <main className="flex-1 p-6 flex items-center justify-center">
+            <div className="bg-white/80 dark:bg-[#141417]/90 backdrop-blur-md p-8 rounded-3xl border border-emerald-500/50 shadow-2xl max-w-lg w-full text-center space-y-5 animate-slide-up card-border-glow">
+              <div className="w-16 h-16 rounded-3xl bg-emerald-500/10 border-2 border-emerald-500/40 text-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-500/10 mx-auto">
+                <CheckCircle2 className="w-8 h-8" />
+              </div>
+              <div className="space-y-1.5">
+                <span className="text-xs font-mono font-bold text-emerald-600 uppercase tracking-widest block">
+                  ROUND 2 SUBMISSION RECORDED
+                </span>
+                <h2 className="text-xl font-black text-zinc-900 dark:text-white">
+                  Round 2 Locked & Submitted
+                </h2>
+                <p className="text-xs text-zinc-600 dark:text-[#a1a1aa] leading-relaxed">
+                  You have already completed and submitted Round 2 (Debug It). In accordance with competition regulations, completed rounds cannot be re-entered.
+                </p>
+              </div>
+
+              <div className="p-4 bg-zinc-100 dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 text-xs font-mono space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-zinc-500">Your Round 2 Score:</span>
+                  <span className="font-bold text-emerald-600">{currentUser?.round2Score || 0} / 30 pts</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-zinc-500">Grading Status:</span>
+                  <span className="font-bold capitalize">{gradingStatus || (currentUser?.isRound2Graded ? 'Graded' : 'Non-Graded')}</span>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setCurrentScreen('dashboard')}
+                className="w-full py-3 rounded-xl bg-[#D60303] hover:bg-[#A30B1A] text-white text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer shadow-md btn-interactive"
+              >
+                <span>Return to Participant Dashboard</span>
+              </button>
+            </div>
+          </main>
+        </div>
+      </div>
+    );
+  }
+
   if (!isRoundUnlocked(2)) {
     return (
       <div className="min-h-screen bg-transparent text-[#595959] dark:text-[#f4f4f5] flex flex-col transition-colors duration-200">
@@ -263,12 +310,27 @@ export default function Round2Debug() {
               )}
             </div>
 
-            <div className="flex items-center gap-2 font-mono text-xs">
+            <div className="flex flex-wrap items-center gap-2 font-mono text-xs">
+              <button
+                onClick={() => setCurrentScreen('dashboard')}
+                className="px-3 py-1 rounded-xl bg-zinc-100 dark:bg-zinc-800 hover:bg-[#D60303] hover:text-white text-zinc-700 dark:text-zinc-200 border border-zinc-300 dark:border-zinc-700 font-mono text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs btn-interactive"
+                title="Return to Participant Dashboard"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Return to Dashboard</span>
+              </button>
+
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 font-mono text-xs font-bold shadow-xs">
+                <Clock className={`w-3.5 h-3.5 ${roundTimeLeft < 300 ? 'text-[#D60303] animate-pulse' : 'text-[#D60303]'}`} />
+                <span className={roundTimeLeft < 300 ? 'text-[#D60303] font-black animate-bounce' : 'text-zinc-800 dark:text-zinc-100'}>
+                  {formatRoundTime(roundTimeLeft)}
+                </span>
+              </div>
               <span className={`px-2.5 py-1 rounded-full text-[10px] font-mono font-bold border ${warningCount > 0 ? 'bg-amber-500/10 text-amber-600 border-amber-500/30' : 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30'}`}>
-                Anti-Cheat Warnings: {warningCount || 0}/3
+                Warnings: {warningCount || 0}/3
               </span>
               <span className="px-3 py-1 rounded-full bg-[#A30B1A] text-white font-bold shadow-2xs">
-                Assigned: {problems.length} Workstations (3 Graded + 1 Bonus Practice)
+                {problems.length} Debug Problems (3 × 10M = 30M)
               </span>
             </div>
           </div>
@@ -409,6 +471,16 @@ export default function Round2Debug() {
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
+                        onClick={() => setCurrentScreen('dashboard')}
+                        className="px-3.5 py-2.5 rounded-xl text-xs font-bold bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 transition flex items-center gap-1.5 cursor-pointer btn-interactive"
+                        title="Return to Participant Dashboard"
+                      >
+                        <ArrowLeft className="w-3.5 h-3.5" />
+                        <span>Dashboard</span>
+                      </button>
+
+                      <button
+                        type="button"
                         onClick={() => {
                           const targetProbId = currentProbKey;
                           setPendingVerificationProblemId(targetProbId);
@@ -482,25 +554,50 @@ export default function Round2Debug() {
                       );
                     })}
                   </div>
+
+                  {/* Finalize & Lock Round 2 Action */}
+                  <div className="pt-2 border-t border-zinc-200 dark:border-zinc-800">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (window.confirm("Are you sure you want to finish and lock your Round 2 submission? You will not be able to edit or re-enter Round 2.")) {
+                          markRoundCompletedByUser(2);
+                          setCurrentScreen('dashboard');
+                        }
+                      }}
+                      className="w-full py-2.5 px-4 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition flex items-center justify-center gap-1.5 cursor-pointer btn-interactive"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Finish & Lock Round 2</span>
+                    </button>
+                  </div>
                 </div>
 
-                {/* Live Leaderboard Standings Panel */}
+                {/* Private Personal Scorecard Panel (No public leaderboard for participants) */}
                 <div className="bg-white/80 dark:bg-[#141417]/80 backdrop-blur-md p-5 rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80 shadow-sm space-y-3 card-hover-lift">
                   <h4 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider font-mono flex items-center gap-1.5">
-                    <Award className="w-4 h-4 text-amber-500" /> Live Debug Rank
+                    <Award className="w-4 h-4 text-[#D60303]" /> Round 2 Scorecard
                   </h4>
-                  {leaderboard && leaderboard.length > 0 ? (
-                    <div className="space-y-1.5 font-mono text-xs max-h-48 overflow-y-auto">
-                      {leaderboard.slice(0, 5).map((item, index) => (
-                        <div key={item.id || index} className="flex items-center justify-between p-2 rounded-lg bg-zinc-100 dark:bg-[#09090b]">
-                          <span className="truncate font-medium">{index + 1}. {item.name || item.id}</span>
-                          <span className="font-bold text-[#D60303]">{item.totalScore || 0} pts</span>
-                        </div>
-                      ))}
+                  <div className="p-3 bg-zinc-100 dark:bg-[#09090b] rounded-xl border border-zinc-200 dark:border-zinc-800 space-y-2 font-mono text-xs">
+                    <div className="flex justify-between items-center">
+                      <span className="text-zinc-500 dark:text-zinc-400">Contestant:</span>
+                      <span className="font-bold text-zinc-800 dark:text-zinc-200 truncate max-w-[130px]">{currentUser?.name || currentUser?.id}</span>
                     </div>
-                  ) : (
-                    <p className="text-xs text-zinc-500 font-mono">Live scores syncing...</p>
-                  )}
+                    <div className="flex justify-between items-center">
+                      <span className="text-zinc-500 dark:text-zinc-400">Your R2 Score:</span>
+                      <span className="font-black text-[#D60303]">{currentUser?.round2Score || 0} / 30 pts</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-zinc-500 dark:text-zinc-400">Verified Tasks:</span>
+                      <span className="font-bold text-emerald-600">
+                        {Object.values(mergedSubmissions).filter(s => s?.status === 'VERIFIED').length} / {problems.length || 3}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-zinc-500 dark:text-zinc-400">Round Maximum:</span>
+                      <span className="text-zinc-600 dark:text-zinc-400">30 pts (3 × 10M)</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

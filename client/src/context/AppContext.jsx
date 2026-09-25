@@ -33,7 +33,9 @@ export const AppProvider = ({ children }) => {
   const [eventState, setEventState] = useState({
     status: 'REGISTRATION',
     round1MaxQuestions: 20,
-    round1DurationMinutes: 20,
+    round1DurationMinutes: 10,
+    round2DurationMinutes: 15,
+    round3DurationMinutes: 15,
     round1QualifyCount: 30,
     round2QualifyCount: 10,
     round3StationCount: 5,
@@ -63,6 +65,61 @@ export const AppProvider = ({ children }) => {
     2: { gradingPercentage: 80 },
     3: { gradingPercentage: 50 }
   });
+
+  // Central Real-Time Round Timer
+  const [roundTimeLeft, setRoundTimeLeft] = useState(0);
+
+  useEffect(() => {
+    const computeRemaining = () => {
+      const status = eventState?.status || '';
+      if (!status.includes('_RUNNING')) {
+        setRoundTimeLeft(0);
+        return;
+      }
+
+      if (eventState?.roundEndsAt) {
+        const diff = Math.max(0, Math.floor((new Date(eventState.roundEndsAt).getTime() - Date.now()) / 1000));
+        setRoundTimeLeft(diff);
+      } else if (eventState?.roundStartedAt) {
+        let dur = 20;
+        if (status === 'ROUND_2_RUNNING') dur = eventState?.round2DurationMinutes || 45;
+        else if (status === 'ROUND_3_RUNNING') dur = eventState?.round3DurationMinutes || 40;
+        else dur = eventState?.round1DurationMinutes || 20;
+
+        const end = new Date(eventState.roundStartedAt).getTime() + dur * 60 * 1000;
+        const diff = Math.max(0, Math.floor((end - Date.now()) / 1000));
+        setRoundTimeLeft(diff);
+      } else {
+        let defaultSec = 20 * 60;
+        if (status === 'ROUND_2_RUNNING') defaultSec = 45 * 60;
+        else if (status === 'ROUND_3_RUNNING') defaultSec = 40 * 60;
+        setRoundTimeLeft(defaultSec);
+      }
+    };
+
+    computeRemaining();
+    const interval = setInterval(computeRemaining, 1000);
+    return () => clearInterval(interval);
+  }, [
+    eventState?.status,
+    eventState?.roundEndsAt,
+    eventState?.roundStartedAt,
+    eventState?.round1DurationMinutes,
+    eventState?.round2DurationMinutes,
+    eventState?.round3DurationMinutes
+  ]);
+
+  const formatRoundTime = useCallback((secs) => {
+    if (secs === null || secs === undefined || isNaN(secs) || secs < 0) return '00:00';
+    const totalSec = Math.floor(secs);
+    const hours = Math.floor(totalSec / 3600);
+    const minutes = Math.floor((totalSec % 3600) / 60);
+    const seconds = totalSec % 60;
+    if (hours > 0) {
+      return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    }
+    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  }, []);
 
   // Theme state: 'light' | 'dark'
   const [theme, setTheme] = useState(() => {
@@ -398,9 +455,38 @@ export const AppProvider = ({ children }) => {
         }
       });
 
+      socket.on('participant:reinstated', (data) => {
+        if (data && data.participantId === currentUser?.id) {
+          setIsDisqualified(false);
+          isDisqualifiedRef.current = false;
+          setDisqualificationReason(null);
+          setWarningCount(0);
+          if (currentUser?.id) {
+            localStorage.removeItem(`technova_disqualified_${currentUser.id}`);
+            localStorage.removeItem(`technova_disqualified_reason_${currentUser.id}`);
+            localStorage.setItem(`technova_warnings_${currentUser.id}`, '0');
+          }
+        }
+      });
+
+      socket.on('leaderboard:updated', (data) => {
+        if (data && data.leaderboard) {
+          setLeaderboard(data.leaderboard);
+        }
+      });
+
+      socket.on('submission:updated', () => {
+        fetchLeaderboard();
+      });
+
+      socket.on('hunt:updated', () => {
+        fetchLeaderboard();
+      });
+
       const handleStateUpdate = (state) => {
         if (state) {
           setEventState(prev => ({ ...prev, ...state }));
+          fetchLeaderboard();
         }
       };
 
@@ -482,9 +568,9 @@ export const AppProvider = ({ children }) => {
     });
   }, [currentUser?.role, currentUser?.id, currentScreen]);
 
-  // Tab switch, Window blur & Full screen monitoring for active rounds (round1, round2, round3)
+  // Tab switch, Window blur & Full screen monitoring for active rounds (round1 and round3 only; Round 2 is exempt from fullscreen/blur to permit local coding/compilers)
   useEffect(() => {
-    if (currentUser?.role !== 'PARTICIPANT' || !['round1', 'round2', 'round3'].includes(currentScreen)) {
+    if (currentUser?.role !== 'PARTICIPANT' || !['round1', 'round3'].includes(currentScreen)) {
       return;
     }
 
@@ -720,6 +806,50 @@ export const AppProvider = ({ children }) => {
     }
   };
 
+  const recalculateLeaderboard = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/admin/recalculate`, { method: 'POST' });
+      const data = await res.json();
+      if (data.success && data.leaderboard) {
+        setLeaderboard(data.leaderboard);
+        return data;
+      }
+    } catch (err) {
+      console.error('Recalculate error:', err);
+      fetchLeaderboard();
+    }
+  }, []);
+
+  const disqualifyParticipantManual = async (participantId, reason, round = 'ALL') => {
+    try {
+      const res = await fetch(`${API_BASE}/anticheat/disqualify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ participantId, reason, round })
+      });
+      const data = await res.json();
+      fetchLeaderboard();
+      return data;
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  };
+
+  const reinstateParticipant = async (participantId) => {
+    try {
+      const res = await fetch(`${API_BASE}/anticheat/reinstate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ participantId, coordinatorId: currentUser?.id })
+      });
+      const data = await res.json();
+      fetchLeaderboard();
+      return data;
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  };
+
   const requestFullScreen = async () => {
     try {
       const docEl = document.documentElement;
@@ -787,31 +917,64 @@ export const AppProvider = ({ children }) => {
 
   // Round Access Validation Helper
   // Returns true if the round is open AND the participant is allowed to enter.
-  // NOTE: ALL participants can enter ALL rounds once the round is running.
-  // Grading status (graded vs non_graded) is determined server-side at attempt creation.
+  // Check if a round has been completed/submitted by the logged in participant
+  const isRoundCompletedByUser = (roundNumber) => {
+    if (currentUser?.role === 'ADMIN' || currentUser?.role === 'COORDINATOR') return false;
+    const pid = currentUser?.id;
+    if (!pid) return false;
+
+    // 1. Direct local storage submission marker
+    if (localStorage.getItem(`technova_r${roundNumber}_completed_${pid}`) === 'true') {
+      return true;
+    }
+
+    // 2. Leaderboard entry check
+    const userEntry = leaderboard.find(
+      (entry) => entry.participantId === pid || entry.id === pid || entry.email === currentUser?.email
+    );
+    if (!userEntry) return false;
+
+    if (roundNumber === 1) {
+      return !!userEntry.r1Completed || (userEntry.r1SubmittedAt > 0) || (userEntry.r1Score > 0 && eventState?.status !== 'ROUND_1_RUNNING');
+    }
+    if (roundNumber === 2) {
+      return !!userEntry.r2Completed || (userEntry.r2Score >= 30 && userEntry.r2LatestVerified > 0);
+    }
+    if (roundNumber === 3) {
+      return !!userEntry.r3Completed || (userEntry.r3SubmittedAt > 0) || (userEntry.r3Score > 0);
+    }
+    return false;
+  };
+
+  const markRoundCompletedByUser = (roundNumber) => {
+    const pid = currentUser?.id;
+    if (pid) {
+      localStorage.setItem(`technova_r${roundNumber}_completed_${pid}`, 'true');
+    }
+  };
+
+  // Participant round access logic:
+  // A round is ONLY accessible if:
+  // 1. It is currently RUNNING (e.g. ROUND_1_RUNNING).
+  // 2. Once coordinator ends the round (e.g. ROUND_1_ENDED), it is LOCKED for everyone.
+  // 3. If a participant has already completed that round, it CANNOT be accessed again!
   const isRoundUnlocked = (roundNumber) => {
     if (currentUser?.role === 'ADMIN' || currentUser?.role === 'COORDINATOR') return true;
     const status = eventState?.status || 'REGISTRATION';
 
+    // If user already completed this round, it is LOCKED for them
+    if (isRoundCompletedByUser(roundNumber)) {
+      return false;
+    }
+
     if (roundNumber === 1) {
-      return [
-        'ROUND_1_RUNNING', 'ROUND_1_ENDED',
-        'ROUND_2_READY', 'ROUND_2_RUNNING', 'ROUND_2_ENDED',
-        'ROUND_3_READY', 'ROUND_3_RUNNING', 'COMPLETED'
-      ].includes(status);
+      return status === 'ROUND_1_RUNNING';
     }
     if (roundNumber === 2) {
-      // ALL participants can enter Round 2 once it is running
-      return [
-        'ROUND_2_RUNNING', 'ROUND_2_ENDED',
-        'ROUND_3_READY', 'ROUND_3_RUNNING', 'COMPLETED'
-      ].includes(status);
+      return status === 'ROUND_2_RUNNING';
     }
     if (roundNumber === 3) {
-      // ALL participants can enter Round 3 once it is running
-      return [
-        'ROUND_3_RUNNING', 'COMPLETED'
-      ].includes(status);
+      return status === 'ROUND_3_RUNNING';
     }
     return false;
   };
@@ -833,9 +996,43 @@ export const AppProvider = ({ children }) => {
       return ['ROUND_2_ENDED', 'ROUND_3_READY', 'ROUND_3_RUNNING', 'COMPLETED'].includes(status);
     }
     if (roundNumber === 3) {
-      return status === 'COMPLETED';
+      return status === 'COMPLETED' || status === 'ROUND_3_ENDED';
     }
     return false;
+  };
+
+  // Dynamic Announcement Timestamp Formatter
+  const formatAnnouncementTime = (ann) => {
+    if (!ann) return '';
+    if (ann.createdAt) {
+      const created = new Date(ann.createdAt).getTime();
+      const now = Date.now();
+      const diffSecs = Math.max(0, Math.floor((now - created) / 1000));
+      if (diffSecs < 45) return 'Just now';
+      if (diffSecs < 3600) return `${Math.floor(diffSecs / 60)}m ago`;
+      if (diffSecs < 86400) return `${Math.floor(diffSecs / 3600)}h ago`;
+      return new Date(ann.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric' }) + ', ' +
+             new Date(ann.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+    }
+    return ann.time || 'Just now';
+  };
+
+  const updateParticipantGradingOverride = async (participantId, round, status) => {
+    try {
+      const res = await fetch(`${API_BASE}/coordinator/participant-grading-override`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ participantId, round, status })
+      });
+      const data = await res.json();
+      if (data.success) {
+        await fetchLeaderboard();
+      }
+      return data;
+    } catch (err) {
+      console.error('Update grading override error:', err);
+      return { success: false, message: err.message };
+    }
   };
 
   const navigateToRound = async (roundScreen) => {
@@ -843,12 +1040,26 @@ export const AppProvider = ({ children }) => {
     if (roundScreen === 'round2') roundNum = 2;
     if (roundScreen === 'round3') roundNum = 3;
 
-    if (!isRoundUnlocked(roundNum)) {
-      alert(`⚠️ Round ${roundNum} is currently locked!\nIt will be activated once the Coordinator initiates Round ${roundNum}.`);
+    // Check if user has already completed this round
+    if (isRoundCompletedByUser(roundNum)) {
+      alert(`🔒 You have already completed Round ${roundNum}. Re-attempts are not permitted.`);
       return;
     }
 
-    await requestFullScreen();
+    if (!isRoundUnlocked(roundNum)) {
+      const status = eventState?.status;
+      if (['ROUND_1_ENDED', 'ROUND_2_ENDED', 'ROUND_3_ENDED', 'COMPLETED'].includes(status)) {
+        alert(`🔒 Round ${roundNum} has already concluded and is now closed.`);
+      } else {
+        alert(`⚠️ Round ${roundNum} is currently locked!\nIt will be activated once the Coordinator initiates Round ${roundNum}.`);
+      }
+      return;
+    }
+
+    // Do NOT request or enforce fullscreen for Round 2 only
+    if (roundScreen !== 'round2') {
+      await requestFullScreen();
+    }
     setCurrentScreen(roundScreen);
   };
 
@@ -915,7 +1126,15 @@ export const AppProvider = ({ children }) => {
       toggleNotifications,
       markAllNotificationsRead,
       flaggedQuestions,
-      toggleFlagQuestion
+      toggleFlagQuestion,
+      roundTimeLeft,
+      recalculateLeaderboard,
+      disqualifyParticipantManual,
+      reinstateParticipant,
+      isRoundCompletedByUser,
+      markRoundCompletedByUser,
+      formatAnnouncementTime,
+      updateParticipantGradingOverride
     }}>
       {children}
 

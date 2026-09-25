@@ -14,7 +14,8 @@ import {
   Lock,
   Wifi,
   WifiOff,
-  ShieldCheck
+  ShieldCheck,
+  ArrowLeft
 } from 'lucide-react';
 
 export default function Round1Quiz() {
@@ -90,7 +91,7 @@ export default function Round1Quiz() {
     }
   }, [isOffline, showOfflineReconnectionSection, setIsOfflineReconnectionEligible]);
 
-  const { flaggedQuestions, toggleFlagQuestion } = useApp();
+  const { flaggedQuestions, toggleFlagQuestion, markRoundCompletedByUser } = useApp();
 
   // Initialize or Restore Quiz Attempt
   useEffect(() => {
@@ -113,6 +114,7 @@ export default function Round1Quiz() {
           if (checkData.status === 'SUBMITTED') {
             setIsSubmitted(true);
             setScoreResult(checkData.score);
+            if (markRoundCompletedByUser) markRoundCompletedByUser(1);
           } else if (checkData.endsAt) {
             const remSecs = Math.max(0, Math.floor((new Date(checkData.endsAt).getTime() - Date.now()) / 1000));
             setTimeLeft(remSecs);
@@ -155,7 +157,7 @@ export default function Round1Quiz() {
     };
 
     initQuiz();
-  }, [currentUser, fetchGradingStatus]);
+  }, [currentUser, fetchGradingStatus, markRoundCompletedByUser]);
 
   const handleSubmitQuiz = React.useCallback(async () => {
     if (isSubmitting || isSubmitted) return;
@@ -181,6 +183,7 @@ export default function Round1Quiz() {
       if (data.success) {
         setScoreResult(data.score);
         setIsSubmitted(true);
+        if (markRoundCompletedByUser) markRoundCompletedByUser(1);
         fetchLeaderboard();
       } else {
         alert(data.message);
@@ -208,6 +211,19 @@ export default function Round1Quiz() {
     }, 1000);
     return () => clearInterval(timer);
   }, [isSubmitted, isLoading, questions, handleSubmitQuiz]);
+
+  // Synchronize with official event state round timer and auto-submit if round ends
+  useEffect(() => {
+    if (isSubmitted || isLoading) return;
+    if (eventState?.status === 'ROUND_1_ENDED' || eventState?.status === 'COMPLETED') {
+      handleSubmitQuiz();
+      return;
+    }
+    if (eventState?.roundEndsAt && eventState?.status === 'ROUND_1_RUNNING') {
+      const globalRemSecs = Math.max(0, Math.floor((new Date(eventState.roundEndsAt).getTime() - Date.now()) / 1000));
+      setTimeLeft(prev => Math.min(prev, globalRemSecs));
+    }
+  }, [eventState?.roundEndsAt, eventState?.status, isSubmitted, isLoading, handleSubmitQuiz]);
 
   const currentQ = questions[currentIdx];
 
@@ -320,7 +336,20 @@ export default function Round1Quiz() {
             </div>
 
             {/* Countdown Timer, Anti-Cheat Warning Badge, & Attempt Token */}
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <button
+                onClick={() => {
+                  if (isSubmitted || window.confirm('Return to dashboard? (Your answered questions are saved).')) {
+                    setCurrentScreen('dashboard');
+                  }
+                }}
+                className="px-3 py-1.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 hover:bg-[#D60303] hover:text-white text-zinc-700 dark:text-zinc-200 border border-zinc-300 dark:border-zinc-700 font-mono text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs btn-interactive"
+                title="Return to Participant Dashboard"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Dashboard</span>
+              </button>
+
               {attemptId && (
                 <span className="px-2.5 py-1 rounded-lg bg-zinc-100 dark:bg-[#09090b] text-[10px] font-mono font-bold text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-[#27272a] hidden sm:inline-block">
                   Attempt: {attemptId}
@@ -401,29 +430,33 @@ export default function Round1Quiz() {
                 </div>
               </div>
 
-              {/* PRIVACY LEADERBOARD PREVIEW */}
+              {/* PERSONAL ATTEMPT SUMMARY */}
               <div className="bg-white dark:bg-[#141417] p-6 rounded-2xl border border-zinc-200 dark:border-[#27272a] shadow-sm space-y-4">
-                <h4 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider font-mono">Live Leaderboard (Participant ID)</h4>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-zinc-900 dark:bg-[#09090b] text-white font-mono">
-                      <tr>
-                        <th className="px-3 py-2">Rank</th>
-                        <th className="px-3 py-2">Participant ID</th>
-                        <th className="px-3 py-2 text-center">Round 1 Score</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-zinc-100 dark:divide-[#27272a]">
-                      {leaderboard.slice(0, 5).map((row) => (
-                        <tr key={row.id} className="hover:bg-zinc-50 dark:hover:bg-[#1a1a1e]">
-                          <td className="px-3 py-2 font-bold text-[#D60303]">#{row.rank}</td>
-                          <td className="px-3 py-2 font-mono font-semibold text-zinc-900 dark:text-white">{row.id}</td>
-                          <td className="px-3 py-2 text-center font-bold text-red-700 dark:text-[#ef4444] font-mono">{row.r1} pts</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <h4 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider font-mono flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                  <span>Your Official Round 1 Record</span>
+                </h4>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center font-mono">
+                  <div className="p-3 bg-zinc-50 dark:bg-[#09090b] rounded-xl border border-zinc-200 dark:border-zinc-800">
+                    <span className="text-[10px] text-zinc-500 uppercase block">Questions</span>
+                    <span className="text-base font-bold text-zinc-900 dark:text-white">20 Questions</span>
+                  </div>
+                  <div className="p-3 bg-zinc-50 dark:bg-[#09090b] rounded-xl border border-zinc-200 dark:border-zinc-800">
+                    <span className="text-[10px] text-zinc-500 uppercase block">Answered</span>
+                    <span className="text-base font-bold text-zinc-900 dark:text-white">{Object.keys(userAnswers).length} / 20</span>
+                  </div>
+                  <div className="p-3 bg-emerald-50 dark:bg-emerald-950/20 rounded-xl border border-emerald-500/30">
+                    <span className="text-[10px] text-emerald-600 uppercase block">Score</span>
+                    <span className="text-base font-black text-emerald-600 dark:text-emerald-400">{scoreResult} / 20 pts</span>
+                  </div>
+                  <div className="p-3 bg-zinc-50 dark:bg-[#09090b] rounded-xl border border-zinc-200 dark:border-zinc-800">
+                    <span className="text-[10px] text-zinc-500 uppercase block">Attempt Status</span>
+                    <span className="text-xs font-bold text-emerald-500 uppercase block mt-1">LOCKED</span>
+                  </div>
                 </div>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 font-mono text-center">
+                  Round 1 is completed. Return to the participant dashboard to await Round 2 initiation.
+                </p>
               </div>
             </div>
           ) : currentQ ? (

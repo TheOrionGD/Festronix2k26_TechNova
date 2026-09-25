@@ -127,7 +127,7 @@ connectDatabase();
 //       Only the graded cohort affects official scores, rankings, and qualification.
 const DEFAULT_ROUND_GRADING_CONFIG = {
   1: { gradingPercentage: 100 },
-  2: { gradingPercentage: 80 },
+  2: { gradingPercentage: 70 },
   3: { gradingPercentage: 50 }
 };
 
@@ -137,9 +137,6 @@ const DEFAULT_ROUND_GRADING_CONFIG = {
 //
 // Strategy: Math.ceil — ensures at least 1 participant is always graded
 // (prevents edge case of 0 when total < 100 and percentage is small).
-// Example: 3 participants, 80% → ceil(2.4) = 3 (all graded, handles small counts)
-// Example: 10 participants, 80% → ceil(8) = 8 graded, 2 non-graded
-// Example: 11 participants, 50% → ceil(5.5) = 6 graded, 5 non-graded
 function calculateQualifiedCount(totalParticipants, percentage) {
   if (totalParticipants <= 0) return 0;
   if (percentage >= 100) return totalParticipants;
@@ -152,8 +149,16 @@ const memoryStore = {
   eventState: {
     status: 'REGISTRATION', // REGISTRATION | ROUND_1_READY | ROUND_1_RUNNING | ROUND_1_ENDED | ROUND_2_READY | ROUND_2_RUNNING | ROUND_2_ENDED | ROUND_3_READY | ROUND_3_RUNNING | COMPLETED
     round1MaxQuestions: 20,
-    round1DurationMinutes: 20,
+    round1DurationMinutes: 10,
+    round2DurationMinutes: 15,
+    round3DurationMinutes: 15,
+    roundStartedAt: null,
+    roundEndsAt: null,
+    round1QualifyMode: 'PERCENTAGE',
+    round1QualifyPercentage: 70, // 70% of R1 users go to R2 as graded
     round1QualifyCount: 30,
+    round2QualifyMode: 'PERCENTAGE',
+    round2QualifyPercentage: 50, // 50% of R2 users go to R3 as graded
     round2QualifyCount: 10,
     round3StationCount: 5,
     registrationCount: 0,
@@ -179,8 +184,16 @@ function resetMemoryStore() {
   memoryStore.eventState = {
     status: 'REGISTRATION',
     round1MaxQuestions: 20,
-    round1DurationMinutes: 20,
+    round1DurationMinutes: 10,
+    round2DurationMinutes: 15,
+    round3DurationMinutes: 15,
+    roundStartedAt: null,
+    roundEndsAt: null,
+    round1QualifyMode: 'PERCENTAGE',
+    round1QualifyPercentage: 70,
     round1QualifyCount: 30,
+    round2QualifyMode: 'PERCENTAGE',
+    round2QualifyPercentage: 50,
     round2QualifyCount: 10,
     round3StationCount: 5,
     registrationCount: 0,
@@ -226,6 +239,38 @@ app.post('/api/admin/purge-all-data', async (req, res) => {
       });
     }
     res.json({ success: true, message: 'All in-memory state and database collections purged successfully.' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Purge only participant-related data while preserving coordinators, admins, questions, and clues
+app.post('/api/coordinator/delete-all-participants', async (req, res) => {
+  try {
+    memoryStore.users = memoryStore.users.filter(u => u.role !== 'PARTICIPANT');
+    memoryStore.quizAttempts = {};
+    memoryStore.debugAttempts = {};
+    memoryStore.huntAttempts = {};
+    memoryStore.submissions = [];
+    memoryStore.antiCheatLogs = [];
+
+    if (isDbConnected) {
+      await User.deleteMany({ role: 'PARTICIPANT' });
+      await QuizAttempt.deleteMany({});
+      await DebugAttempt.deleteMany({});
+      await HuntAttempt.deleteMany({});
+      await Submission.deleteMany({});
+      await AntiCheatLog.deleteMany({});
+      await EventState.updateMany({}, { registrationCount: 0 });
+    }
+
+    try {
+      const { formattedLeaderboard, qualifySettings } = await computeLeaderboardData();
+      io.emit('leaderboard:updated', { leaderboard: formattedLeaderboard, qualifySettings });
+      io.emit('participants:cleared');
+    } catch (e) {}
+
+    res.json({ success: true, message: 'All participant accounts, submissions, and attempts deleted successfully from database.' });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -896,8 +941,33 @@ app.post('/api/auth/register', async (req, res) => {
 });
 
 app.put('/api/event/settings', async (req, res) => {
-  const newSettings = req.body;
+  const newSettings = { ...req.body };
   try {
+    const currentState = await getEventState();
+    const now = new Date();
+
+    // Automatically manage live round start and end countdown timestamps
+    if (newSettings.status) {
+      if (newSettings.status === 'ROUND_1_RUNNING') {
+        const dMin = newSettings.round1DurationMinutes ?? currentState.round1DurationMinutes ?? 10;
+        newSettings.roundStartedAt = now;
+        newSettings.roundEndsAt = new Date(now.getTime() + dMin * 60 * 1000);
+      } else if (newSettings.status === 'ROUND_2_RUNNING') {
+        const dMin = newSettings.round2DurationMinutes ?? currentState.round2DurationMinutes ?? 15;
+        newSettings.roundStartedAt = now;
+        newSettings.roundEndsAt = new Date(now.getTime() + dMin * 60 * 1000);
+      } else if (newSettings.status === 'ROUND_3_RUNNING') {
+        const dMin = newSettings.round3DurationMinutes ?? currentState.round3DurationMinutes ?? 15;
+        newSettings.roundStartedAt = now;
+        newSettings.roundEndsAt = new Date(now.getTime() + dMin * 60 * 1000);
+      } else if (['ROUND_1_ENDED', 'ROUND_2_ENDED', 'ROUND_3_ENDED', 'COMPLETED'].includes(newSettings.status)) {
+        newSettings.roundEndsAt = now;
+      } else if (newSettings.status === 'REGISTRATION') {
+        newSettings.roundStartedAt = null;
+        newSettings.roundEndsAt = null;
+      }
+    }
+
     let updatedState = null;
     if (isDbConnected) {
       updatedState = await EventState.findOneAndUpdate({}, newSettings, { new: true, upsert: true });
@@ -905,9 +975,51 @@ app.put('/api/event/settings', async (req, res) => {
       memoryStore.eventState = { ...memoryStore.eventState, ...newSettings };
       updatedState = memoryStore.eventState;
     }
+
+    // Broadcast live event state
     io.emit('eventState:updated', updatedState);
     io.emit('event:state_changed', updatedState);
+
+    // Live Calculation Update for all connected clients
+    try {
+      const { formattedLeaderboard, qualifySettings } = await computeLeaderboardData();
+      io.emit('leaderboard:updated', { 
+        success: true, 
+        leaderboard: formattedLeaderboard, 
+        qualifySettings,
+        eventState: updatedState
+      });
+    } catch (e) {
+      console.warn('Leaderboard recomputation after state update warning:', e.message);
+    }
+
     res.json({ success: true, eventState: updatedState });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Explicit endpoint to trigger real-time calculations across all 3 rounds
+app.post('/api/admin/recalculate', async (req, res) => {
+  try {
+    const { formattedLeaderboard, qualifySettings, gradedR2Set, gradedR3Set } = await computeLeaderboardData();
+    const state = await getEventState();
+
+    io.emit('leaderboard:updated', {
+      success: true,
+      leaderboard: formattedLeaderboard,
+      qualifySettings,
+      eventState: state
+    });
+
+    res.json({
+      success: true,
+      message: 'Recalculation executed and broadcast successfully.',
+      leaderboard: formattedLeaderboard,
+      qualifySettings,
+      gradedCountR2: gradedR2Set?.size || 0,
+      gradedCountR3: gradedR3Set?.size || 0
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -1097,12 +1209,12 @@ async function computeLeaderboardData() {
 
   if (isDbConnected) {
     participants = await User.find({ role: 'PARTICIPANT' });
-    quizAttemptsList = await QuizAttempt.find({ status: 'SUBMITTED' });
+    quizAttemptsList = await QuizAttempt.find();
     submissions = await Submission.find({ status: 'VERIFIED' });
     huntAttemptsList = await HuntAttempt.find();
   } else {
     participants = memoryStore.users.filter(u => u.role === 'PARTICIPANT');
-    quizAttemptsList = Object.values(memoryStore.quizAttempts).filter(a => a.status === 'SUBMITTED');
+    quizAttemptsList = Object.values(memoryStore.quizAttempts);
     submissions = memoryStore.submissions.filter(s => s.status === 'VERIFIED');
     huntAttemptsList = Object.values(memoryStore.huntAttempts);
   }
@@ -1113,13 +1225,30 @@ async function computeLeaderboardData() {
   const isEventCompleted = state.status === 'COMPLETED' || state.status === 'ROUND_3_ENDED';
   const isAllRoundsEnded = ['ROUND_3_ENDED', 'COMPLETED'].includes(state.status);
 
-  // ── ROUND GRADING CONFIGURATION ───────────────────────────────────────────
+  // ── DYNAMIC ROUND GRADING & QUALIFICATION CONFIGURATION ─────────────────
   const roundGradingConfig = state.roundGradingConfig || DEFAULT_ROUND_GRADING_CONFIG;
-  const r2GradingPct = roundGradingConfig[2]?.gradingPercentage ?? 80;
-  const r3GradingPct = roundGradingConfig[3]?.gradingPercentage ?? 50;
   const totalParticipants = participants.length;
-  const r2GradedCount = calculateQualifiedCount(totalParticipants, r2GradingPct);
-  const r3GradedCount = calculateQualifiedCount(totalParticipants, r3GradingPct);
+
+  // Round 1 is 100% of participants
+  const r1GradingPct = 100;
+  
+  // Round 2 Graded Cohort (Default: 70% of R1 participants)
+  let r2GradedCount = 0;
+  const r2GradingPct = state.round1QualifyPercentage ?? roundGradingConfig[2]?.gradingPercentage ?? 70;
+  if (state.round1QualifyMode === 'COUNT' && state.round1QualifyCount > 0) {
+    r2GradedCount = Math.min(totalParticipants, parseInt(state.round1QualifyCount));
+  } else {
+    r2GradedCount = calculateQualifiedCount(totalParticipants, r2GradingPct);
+  }
+
+  // Round 3 Graded Cohort (Default: 50% of Round 2 Graded participants)
+  let r3GradedCount = 0;
+  const r3GradingPct = state.round2QualifyPercentage ?? roundGradingConfig[3]?.gradingPercentage ?? 50;
+  if (state.round2QualifyMode === 'COUNT' && state.round2QualifyCount > 0) {
+    r3GradedCount = Math.min(r2GradedCount, parseInt(state.round2QualifyCount));
+  } else {
+    r3GradedCount = calculateQualifiedCount(r2GradedCount, r3GradingPct);
+  }
 
   // 1. Build participant base records
   const rawList = participants.map(p => {
@@ -1127,22 +1256,37 @@ async function computeLeaderboardData() {
     const r2Subs = submissions.filter(s => s.participantId === p.id);
     const hAttempt = huntAttemptsList.find(a => a.participantId === p.id);
 
-    const r1Score = qAttempt ? (qAttempt.score || 0) : 0;
+    let r1Score = 0;
+    if (qAttempt) {
+      if (qAttempt.score !== undefined && qAttempt.score > 0) {
+        r1Score = qAttempt.score;
+      } else if (qAttempt.userAnswers && qAttempt.selectedQuestions) {
+        const ans = qAttempt.userAnswers instanceof Map ? Object.fromEntries(qAttempt.userAnswers) : (qAttempt.userAnswers || {});
+        qAttempt.selectedQuestions.forEach(sq => {
+          if (ans[sq.questionId] !== undefined && parseInt(ans[sq.questionId]) === sq.correctOptionIndex) {
+            r1Score += 1;
+          }
+        });
+      }
+    }
     const r1SubmittedAt = qAttempt?.submittedAt ? new Date(qAttempt.submittedAt).getTime() : (qAttempt?.updatedAt ? new Date(qAttempt.updatedAt).getTime() : 0);
     const r1Duration = (qAttempt?.startedAt && qAttempt?.submittedAt)
       ? (new Date(qAttempt.submittedAt).getTime() - new Date(qAttempt.startedAt).getTime())
       : 999999999;
     const hasAttemptedR1 = !!qAttempt;
+    const r1Completed = (qAttempt?.status === 'SUBMITTED') || (r1SubmittedAt > 0) || (r1Score > 0 && isR1EndedOrFurther);
 
     const r2Score = r2Subs.reduce((acc, curr) => acc + (curr.marks || 0), 0);
     const r2LatestVerified = r2Subs.length > 0
       ? Math.max(...r2Subs.map(s => s.verifiedAt ? new Date(s.verifiedAt).getTime() : 0))
       : 0;
     const hasAttemptedR2 = r2Subs.length > 0;
+    const r2Completed = (r2Subs.length >= 3 && r2Subs.every(s => s.status === 'VERIFIED')) || (memoryStore.debugAttempts[p.id]?.status === 'COMPLETED');
 
     const r3Score = hAttempt ? (hAttempt.score || 0) : 0;
     const r3SubmittedAt = hAttempt?.updatedAt ? new Date(hAttempt.updatedAt).getTime() : 0;
     const hasAttemptedR3 = !!hAttempt;
+    const r3Completed = (hAttempt?.status === 'COMPLETED') || (r3SubmittedAt > 0);
 
     const hintsMap = hAttempt?.hintsUsed instanceof Map ? Object.fromEntries(hAttempt.hintsUsed) : (hAttempt?.hintsUsed || {});
     const r3HintsCount = Object.values(hintsMap).filter(Boolean).length;
@@ -1164,18 +1308,22 @@ async function computeLeaderboardData() {
       year: p.year,
       accountStatus: p.accountStatus,
       isDisqualified,
+      manualGradingOverrides: p.manualGradingOverrides || {},
       r1Score: isDisqualified ? 0 : r1Score,
       r1SubmittedAt,
       r1Duration,
       hasAttemptedR1,
+      r1Completed,
       r2Score: isDisqualified ? 0 : roundedR2Score,
       r2LatestVerified,
       hasAttemptedR2,
+      r2Completed,
       r3Score: isDisqualified ? 0 : r3Score,
       r3SubmittedAt,
       r3HintsCount,
       r3Duration,
       hasAttemptedR3,
+      r3Completed,
       totalScore: isDisqualified ? 0 : totalScore
     };
   });
@@ -1190,22 +1338,26 @@ async function computeLeaderboardData() {
   });
 
   const r1RankMap = new Map();
-  // gradedR2Set: official graded cohort for Round 2 (top r2GradedCount by R1 leaderboard)
-  // ALL participants can ATTEND R2, only this set is officially graded
+  // gradedR2Set: official graded cohort for Round 2 (top 70% or custom count by R1 leaderboard, with manual override support)
   const gradedR2Set = new Set();
   const qualifiedR2Set = new Set(); // alias for backward compat
 
   r1Sorted.forEach((p, idx) => {
     const rank = idx + 1;
     r1RankMap.set(p.id, rank);
-    if (rank <= r2GradedCount) {
+    if (p.manualGradingOverrides?.round2 === 'graded') {
+      gradedR2Set.add(p.id);
+      qualifiedR2Set.add(p.id);
+    } else if (p.manualGradingOverrides?.round2 === 'non_graded') {
+      // Coordinator explicitly marked as non-graded
+    } else if (rank <= r2GradedCount) {
       gradedR2Set.add(p.id);
       qualifiedR2Set.add(p.id);
     }
   });
 
   // 3. Step 2: Round 2 Sorting & R3 Graded Cohort Selection
-  // Only the gradedR2Set participants feed into R3 graded cohort calculation
+  // Only the gradedR2Set participants feed into R3 graded cohort calculation (Top 50% of R2)
   const r2GradedList = rawList.filter(p => gradedR2Set.has(p.id));
   const r2Sorted = [...r2GradedList].sort((a, b) => {
     const aR1R2 = a.r1Score + a.r2Score;
@@ -1223,7 +1375,12 @@ async function computeLeaderboardData() {
   r2Sorted.forEach((p, idx) => {
     const rank = idx + 1;
     r2RankMap.set(p.id, rank);
-    if (rank <= r3GradedCount) {
+    if (p.manualGradingOverrides?.round3 === 'graded') {
+      gradedR3Set.add(p.id);
+      qualifiedR3Set.add(p.id);
+    } else if (p.manualGradingOverrides?.round3 === 'non_graded') {
+      // Coordinator explicitly marked as non-graded
+    } else if (rank <= r3GradedCount) {
       gradedR3Set.add(p.id);
       qualifiedR3Set.add(p.id);
     }
@@ -1343,6 +1500,10 @@ async function computeLeaderboardData() {
       isGradedR3: isQualifiedR3,
       canParticipateR2: true,
       canParticipateR3: true,
+      r1Completed: item.r1Completed,
+      r2Completed: item.r2Completed,
+      r3Completed: item.r3Completed,
+      manualGradingOverrides: item.manualGradingOverrides || {},
       isWinner: overallRank <= 3 && item.totalScore > 0 && isQualifiedR3 && !item.isDisqualified,
       isDisqualified: !!item.isDisqualified,
       status: statusText,
@@ -1357,6 +1518,9 @@ async function computeLeaderboardData() {
     r3GradedCount,
     r2GradingPct,
     r3GradingPct,
+    round1QualifyMode: state.round1QualifyMode || 'PERCENTAGE',
+    round2QualifyMode: state.round2QualifyMode || 'PERCENTAGE',
+    round3StationCount: state.round3StationCount ?? 5,
     totalParticipants,
     status: state.status,
     activeRound: state.activeRound,
@@ -1692,7 +1856,7 @@ app.post('/api/quiz/start', async (req, res) => {
       };
     });
 
-    const durationMinutes = state.round1DurationMinutes || 20;
+    const durationMinutes = state.round1DurationMinutes || 10;
     const startedAt = new Date();
     const endsAt = new Date(startedAt.getTime() + durationMinutes * 60 * 1000);
     const attemptId = `ATT1-${participantId}-${Date.now()}`;
@@ -1894,6 +2058,14 @@ app.post('/api/quiz/submit', async (req, res) => {
       gradingStatus
     });
     io.emit('submission:updated', { participantId, round: 1, score, gradingStatus });
+
+    // Live Calculation Update
+    try {
+      const { formattedLeaderboard, qualifySettings } = await computeLeaderboardData();
+      io.emit('leaderboard:updated', { leaderboard: formattedLeaderboard, qualifySettings });
+    } catch (e) {
+      console.warn('Leaderboard recomputation error on quiz submit:', e.message);
+    }
 
     res.json({
       success: true,
@@ -2147,32 +2319,35 @@ app.post('/api/debug/start', async (req, res) => {
     if (existingAttempt) {
       selectedProblems = activeProblems.filter(p => existingAttempt.selectedProblemIds.includes(p.problemId || p.id));
     } else {
-      // Pick 1 C problem, 1 Python problem, 1 Java problem, and 1 Bonus problem
-      const cProbs = secureShuffle(activeProblems.filter(p => p.language?.toUpperCase() === 'C'));
-      const pyProbs = secureShuffle(activeProblems.filter(p => p.language?.toUpperCase() === 'PYTHON'));
-      const javaProbs = secureShuffle(activeProblems.filter(p => p.language?.toUpperCase() === 'JAVA'));
-      const bonusProbs = secureShuffle(activeProblems.filter(p => p.isBonus || (p.marks === 0)));
+      // Pick 3 problems: 1 C problem, 1 Python problem, 1 Java problem (3 Questions x 10 Marks = 30 Marks)
+      const cProbs = secureShuffle(activeProblems.filter(p => p.language?.toUpperCase() === 'C' && !p.isBonus));
+      const pyProbs = secureShuffle(activeProblems.filter(p => p.language?.toUpperCase() === 'PYTHON' && !p.isBonus));
+      const javaProbs = secureShuffle(activeProblems.filter(p => p.language?.toUpperCase() === 'JAVA' && !p.isBonus));
 
       const picked = [];
       if (cProbs.length > 0) picked.push(cProbs[0]);
       if (pyProbs.length > 0) picked.push(pyProbs[0]);
       if (javaProbs.length > 0) picked.push(javaProbs[0]);
-      if (bonusProbs.length > 0) picked.push(bonusProbs[0]);
 
-      // Fallback if specific languages missing
-      if (picked.length < 4) {
-        const remaining = secureShuffle(activeProblems.filter(p => !picked.includes(p)));
-        picked.push(...remaining.slice(0, 4 - picked.length));
+      // Fallback if specific languages missing to guarantee exactly 3 questions
+      if (picked.length < 3) {
+        const remaining = secureShuffle(activeProblems.filter(p => !picked.includes(p) && !p.isBonus));
+        picked.push(...remaining.slice(0, 3 - picked.length));
       }
 
       const selectedIds = picked.map(p => p.problemId || p.id);
       const attemptId = `ATT2-${participantId}-${Date.now()}`;
+      const startedAt = new Date();
+      const dMin = state.round2DurationMinutes || 15;
+      const endsAt = state.roundEndsAt ? new Date(state.roundEndsAt) : new Date(startedAt.getTime() + dMin * 60 * 1000);
+
       const newAttempt = {
         attemptId,
         participantId,
         roundId: 'ROUND_2',
         selectedProblemIds: selectedIds,
-        startedAt: new Date(),
+        startedAt,
+        endsAt,
         status: 'ACTIVE',
         // ── GRADING STATUS assigned here server-side (cannot be overridden by client) ──
         participationStatus: 'active',
@@ -2187,6 +2362,7 @@ app.post('/api/debug/start', async (req, res) => {
       await createAuditLog(participantId, 'PARTICIPANT', 'ROUND2_STARTED', newAttempt.attemptId, {
         gradingStatus: r2GradingStatus
       });
+      existingAttempt = newAttempt;
     }
 
     // SANITIZE DEBUG PAYLOAD (Remove solutionSnippet)
@@ -2197,8 +2373,8 @@ app.post('/api/debug/start', async (req, res) => {
       language: p.language,
       brokenCode: p.brokenCode,
       expectedOutput: p.expectedOutput,
-      marks: p.marks || 0,
-      isBonus: !!p.isBonus || idx === 3,
+      marks: p.marks || 10,
+      isBonus: false,
       problemNumber: idx + 1,
       totalProblems: selectedProblems.length
     }));
@@ -2206,6 +2382,8 @@ app.post('/api/debug/start', async (req, res) => {
     res.json({
       success: true,
       problems: sanitizedProblems,
+      startedAt: existingAttempt?.startedAt,
+      endsAt: existingAttempt?.endsAt || (state.roundEndsAt ? state.roundEndsAt : null),
       gradingStatus: existingAttempt?.gradingStatus || r2GradingStatus,
       participationStatus: 'active',
       isNonGraded: (existingAttempt?.gradingStatus || r2GradingStatus) === 'non_graded'
@@ -2222,6 +2400,7 @@ app.get('/api/debug/current', async (req, res) => {
   try {
     let attempt = null;
     let activeProblems = [];
+    const state = await getEventState();
 
     if (isDbConnected) {
       attempt = await DebugAttempt.findOne({ participantId });
@@ -2267,6 +2446,8 @@ app.get('/api/debug/current', async (req, res) => {
     res.json({ 
       success: true, 
       hasAttempt: true, 
+      startedAt: attempt.startedAt,
+      endsAt: attempt.endsAt || (state.roundEndsAt ? state.roundEndsAt : null),
       gradingStatus: attempt.gradingStatus || 'graded',
       participationStatus: attempt.participationStatus || 'active',
       isNonGraded: attempt.gradingStatus === 'non_graded',
@@ -2365,6 +2546,15 @@ app.post('/api/coordinator/verify', async (req, res) => {
 
     await createAuditLog(coordinatorId, 'COORDINATOR', 'DEBUG_SUBMISSION_VERIFIED', problemId, { participantId, marks: numericMarks, rubricBreakdown });
     io.emit('verification:updated', { participantId, problemId, ...update });
+
+    // Live Calculation Update
+    try {
+      const { formattedLeaderboard, qualifySettings } = await computeLeaderboardData();
+      io.emit('leaderboard:updated', { leaderboard: formattedLeaderboard, qualifySettings });
+    } catch (e) {
+      console.warn('Leaderboard recomputation error on coordinator verify:', e.message);
+    }
+
     res.json({ success: true, message: 'Verification recorded successfully.', update });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -2595,6 +2785,9 @@ app.post('/api/hunt/start', async (req, res) => {
       const selectedClues = activeClues.slice(0, 5);
       const selectedIds = selectedClues.map(c => c.clueId || c.id);
       const attemptId = `ATT3-${participantId}-${Date.now()}`;
+      const startedAt = new Date();
+      const dMin = state.round3DurationMinutes || 15;
+      const endsAt = state.roundEndsAt ? new Date(state.roundEndsAt) : new Date(startedAt.getTime() + dMin * 60 * 1000);
 
       existingAttempt = {
         attemptId,
@@ -2608,7 +2801,8 @@ app.post('/api/hunt/start', async (req, res) => {
         answers: {},
         incorrectAttempts: {},
         score: 0,
-        startedAt: new Date(),
+        startedAt,
+        endsAt,
         status: 'ACTIVE',
         // ── GRADING STATUS assigned here server-side (cannot be overridden by client) ──
         participationStatus: 'active',
@@ -2657,6 +2851,8 @@ app.post('/api/hunt/start', async (req, res) => {
       success: true,
       hasAttempt: true,
       isCompleted: false,
+      startedAt: existingAttempt.startedAt,
+      endsAt: existingAttempt.endsAt || (state.roundEndsAt ? state.roundEndsAt : null),
       currentStep: existingAttempt.currentClueIndex + 1,
       totalSteps: existingAttempt.selectedClueIds.length,
       selectedClueIds: existingAttempt.selectedClueIds || [],
@@ -2689,6 +2885,7 @@ app.get('/api/hunt/current', async (req, res) => {
   try {
     let attempt = null;
     let activeClues = [];
+    const state = await getEventState();
 
     if (isDbConnected) {
       attempt = await HuntAttempt.findOne({ participantId });
@@ -2706,6 +2903,8 @@ app.get('/api/hunt/current', async (req, res) => {
         success: true,
         hasAttempt: true,
         isCompleted: true,
+        startedAt: attempt.startedAt,
+        endsAt: attempt.endsAt || (state.roundEndsAt ? state.roundEndsAt : null),
         gradingStatus: attempt.gradingStatus || 'graded',
         participationStatus: attempt.participationStatus || 'completed',
         isNonGraded: attempt.gradingStatus === 'non_graded',
@@ -2727,6 +2926,8 @@ app.get('/api/hunt/current', async (req, res) => {
         success: true,
         hasAttempt: true,
         isCompleted: true,
+        startedAt: attempt.startedAt,
+        endsAt: attempt.endsAt || (state.roundEndsAt ? state.roundEndsAt : null),
         gradingStatus: attempt.gradingStatus || 'graded',
         participationStatus: attempt.participationStatus || 'completed',
         isNonGraded: attempt.gradingStatus === 'non_graded',
@@ -2746,6 +2947,8 @@ app.get('/api/hunt/current', async (req, res) => {
       success: true,
       hasAttempt: true,
       isCompleted: false,
+      startedAt: attempt.startedAt,
+      endsAt: attempt.endsAt || (state.roundEndsAt ? state.roundEndsAt : null),
       gradingStatus: attempt.gradingStatus || 'graded',
       participationStatus: attempt.participationStatus || 'active',
       isNonGraded: attempt.gradingStatus === 'non_graded',
@@ -2852,6 +3055,16 @@ app.post('/api/hunt/:clueId/answer', async (req, res) => {
         score: attempt.score,
         isCompleted: attempt.status === 'COMPLETED'
       });
+
+      io.emit('hunt:updated', { participantId, clueId: cIdNum, score: attempt.score, isCompleted: attempt.status === 'COMPLETED' });
+
+      // Live Calculation Update
+      try {
+        const { formattedLeaderboard, qualifySettings } = await computeLeaderboardData();
+        io.emit('leaderboard:updated', { leaderboard: formattedLeaderboard, qualifySettings });
+      } catch (e) {
+        console.warn('Leaderboard recomputation error on hunt answer:', e.message);
+      }
 
       return res.json({
         success: true,
@@ -2968,6 +3181,16 @@ app.post('/api/hunt/:clueId/skip', async (req, res) => {
       isCompleted: attempt.status === 'COMPLETED'
     });
 
+    io.emit('hunt:updated', { participantId, clueId: cIdNum, score: attempt.score, isCompleted: attempt.status === 'COMPLETED' });
+
+    // Live Calculation Update
+    try {
+      const { formattedLeaderboard, qualifySettings } = await computeLeaderboardData();
+      io.emit('leaderboard:updated', { leaderboard: formattedLeaderboard, qualifySettings });
+    } catch (e) {
+      console.warn('Leaderboard recomputation error on hunt skip:', e.message);
+    }
+
     return res.json({
       success: true,
       skipped: true,
@@ -3045,13 +3268,65 @@ app.post('/api/announcements', async (req, res) => {
     if (isDbConnected) count = await Announcement.countDocuments();
     else count = memoryStore.announcements.length;
 
-    const newA = { id: count + 1, title, message, tag, time: 'Just now' };
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+    const newA = { 
+      id: count + 1, 
+      title, 
+      message, 
+      tag, 
+      time: timeStr,
+      createdAt: now.toISOString()
+    };
 
     if (isDbConnected) await Announcement.create(newA);
-    else memoryStore.announcements.push(newA);
+    else memoryStore.announcements.unshift(newA);
 
     io.emit('announcement:added', newA);
     res.json({ success: true, announcement: newA });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Coordinator Manual Override for Graded / Non-Graded status
+app.post('/api/coordinator/participant-grading-override', async (req, res) => {
+  const { participantId, round, status } = req.body; // status: 'graded' | 'non_graded' | 'auto'
+  if (!participantId || !round) {
+    return res.status(400).json({ success: false, message: 'participantId and round are required.' });
+  }
+  try {
+    const roundKey = (round === 2 || round === '2' || round === 'round2') ? 'round2' : 'round3';
+    let user = null;
+    if (isDbConnected) {
+      user = await User.findOne({ id: participantId });
+      if (user) {
+        if (!user.manualGradingOverrides) user.manualGradingOverrides = {};
+        if (status === 'auto') {
+          delete user.manualGradingOverrides[roundKey];
+        } else {
+          user.manualGradingOverrides[roundKey] = status;
+        }
+        user.markModified('manualGradingOverrides');
+        await user.save();
+      }
+    } else {
+      user = memoryStore.users.find(u => u.id === participantId);
+      if (user) {
+        if (!user.manualGradingOverrides) user.manualGradingOverrides = {};
+        if (status === 'auto') {
+          delete user.manualGradingOverrides[roundKey];
+        } else {
+          user.manualGradingOverrides[roundKey] = status;
+        }
+      }
+    }
+
+    // Recompute leaderboard and broadcast updated cohorts
+    const { formattedLeaderboard, qualifySettings } = await computeLeaderboardData();
+    io.emit('leaderboard:updated', { leaderboard: formattedLeaderboard, qualifySettings });
+
+    res.json({ success: true, message: `Updated Round ${roundKey} grading override for ${participantId} to ${status}.` });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -3139,6 +3414,96 @@ app.post('/api/anticheat/disqualify', async (req, res) => {
     io.emit('anticheat:flag', log);
     io.emit('participant:disqualified', { participantId, round, reason });
     res.json({ success: true, message: `Participant ${participantId} disqualified and frozen.` });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Re-instate participant after disqualification (Coordinator / Admin)
+app.post('/api/anticheat/reinstate', async (req, res) => {
+  const { participantId, coordinatorId } = req.body;
+  if (!participantId) {
+    return res.status(400).json({ success: false, message: 'Participant ID is required.' });
+  }
+  try {
+    if (isDbConnected) {
+      await User.findOneAndUpdate({ id: participantId }, { accountStatus: 'ACTIVE' });
+      await QuizAttempt.findOneAndUpdate({ participantId, status: 'DISQUALIFIED' }, { status: 'ACTIVE', participationStatus: 'active' });
+      await DebugAttempt.findOneAndUpdate({ participantId, status: 'DISQUALIFIED' }, { status: 'ACTIVE', participationStatus: 'active' });
+      await HuntAttempt.findOneAndUpdate({ participantId, status: 'DISQUALIFIED' }, { status: 'ACTIVE', participationStatus: 'active' });
+    } else {
+      const u = memoryStore.users.find(usr => usr.id === participantId);
+      if (u) u.accountStatus = 'ACTIVE';
+      if (memoryStore.quizAttempts[participantId] && memoryStore.quizAttempts[participantId].status === 'DISQUALIFIED') {
+        memoryStore.quizAttempts[participantId].status = 'ACTIVE';
+        memoryStore.quizAttempts[participantId].participationStatus = 'active';
+      }
+      if (memoryStore.debugAttempts[participantId] && memoryStore.debugAttempts[participantId].status === 'DISQUALIFIED') {
+        memoryStore.debugAttempts[participantId].status = 'ACTIVE';
+        memoryStore.debugAttempts[participantId].participationStatus = 'active';
+      }
+      if (memoryStore.huntAttempts[participantId] && memoryStore.huntAttempts[participantId].status === 'DISQUALIFIED') {
+        memoryStore.huntAttempts[participantId].status = 'ACTIVE';
+        memoryStore.huntAttempts[participantId].participationStatus = 'active';
+      }
+    }
+
+    const log = {
+      participantId,
+      type: 'REINSTATED',
+      message: `Participant reinstated by ${coordinatorId || 'Coordinator'}.`,
+      timestamp: new Date().toLocaleTimeString()
+    };
+    if (isDbConnected) await AntiCheatLog.create(log);
+    else memoryStore.antiCheatLogs.push({ id: memoryStore.antiCheatLogs.length + 1, ...log });
+
+    io.emit('participant:reinstated', { participantId, coordinatorId });
+    io.emit('anticheat:flag', log);
+
+    // Refresh standings
+    try {
+      const { formattedLeaderboard, qualifySettings } = await computeLeaderboardData();
+      io.emit('leaderboard:updated', { leaderboard: formattedLeaderboard, qualifySettings });
+    } catch (e) {}
+
+    res.json({ success: true, message: `Participant ${participantId} has been successfully reinstated.` });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Coordinator malpractice records & participant anti-cheat status list
+app.get('/api/coordinator/malpractice-records', async (req, res) => {
+  try {
+    let participants = [];
+    let antiCheatLogs = [];
+    if (isDbConnected) {
+      participants = await User.find({ role: 'PARTICIPANT' });
+      antiCheatLogs = await AntiCheatLog.find().sort({ createdAt: -1 });
+    } else {
+      participants = memoryStore.users.filter(u => u.role === 'PARTICIPANT');
+      antiCheatLogs = [...memoryStore.antiCheatLogs].reverse();
+    }
+
+    const records = participants.map(p => {
+      const logs = antiCheatLogs.filter(l => l.participantId === p.id);
+      const isDisqualified = p.accountStatus === 'DISQUALIFIED';
+      return {
+        id: p.id,
+        name: p.name,
+        email: p.email,
+        college: p.college,
+        department: p.department,
+        assignedRound: p.assignedRound,
+        assignedCoordinator: p.assignedCoordinator,
+        accountStatus: p.accountStatus,
+        isDisqualified,
+        warningCount: logs.length,
+        violations: logs.slice(0, 5)
+      };
+    });
+
+    res.json({ success: true, total: records.length, records, logs: antiCheatLogs.slice(0, 100) });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

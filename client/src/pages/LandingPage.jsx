@@ -768,7 +768,7 @@ export default function LandingPage() {
             </span>
             <span>© 2026 TECHNOVA</span>
             <span className="text-[10px] text-zinc-400/80 dark:text-zinc-600/80 font-normal select-none">
-              The system is built using Antigravity
+              The system is built for TechNova
             </span>
           </div>
         </div>

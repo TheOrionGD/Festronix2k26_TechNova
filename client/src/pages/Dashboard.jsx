@@ -39,6 +39,8 @@ export default function Dashboard() {
     isRoundUnlocked,
     isRoundActive,
     isRoundCompleted,
+    isRoundCompletedByUser,
+    formatAnnouncementTime,
     debugSubmissions, 
     submitDebugCode,
     setIsCoordinatorModalOpen,
@@ -46,12 +48,17 @@ export default function Dashboard() {
     announcements,
     debugProblems,
     leaderboard,
-    eventState
+    eventState,
+    roundTimeLeft,
+    formatRoundTime
   } = useApp();
 
-  const userLeaderboardEntry = leaderboard.find(l => l.id === currentUser?.id) || {};
-  const r1Score = userLeaderboardEntry.r1 || 0;
-  const r2Score = userLeaderboardEntry.r2 || 0;
+  const userLeaderboardEntry = leaderboard.find(l => (l.id === currentUser?.id || l.participantId === currentUser?.id)) || {};
+  const r1Score = userLeaderboardEntry.r1Score ?? userLeaderboardEntry.r1 ?? 0;
+  const r2Score = userLeaderboardEntry.r2Score ?? userLeaderboardEntry.r2 ?? 0;
+  const r3Score = userLeaderboardEntry.r3Score ?? userLeaderboardEntry.r3 ?? 0;
+  const totalScore = userLeaderboardEntry.totalScore ?? userLeaderboardEntry.total ?? (r1Score + r2Score + r3Score);
+  const grandBand = userLeaderboardEntry.grandBand?.band || (totalScore >= 80 ? 'Excellent' : totalScore >= 50 ? 'Good' : 'Needs Work');
 
   const [activeProblemId, setActiveProblemId] = useState(1);
   const currentProblem = debugProblems.find(p => p.id === activeProblemId) || debugProblems[0];
@@ -80,17 +87,26 @@ export default function Dashboard() {
     }
   };
 
-  // Round Unlock & Active Helpers
+  // Round Completion & Access State
+  const r1UserDone = isRoundCompletedByUser ? isRoundCompletedByUser(1) : false;
+  const r2UserDone = isRoundCompletedByUser ? isRoundCompletedByUser(2) : false;
+  const r3UserDone = isRoundCompletedByUser ? isRoundCompletedByUser(3) : false;
+
+  const r1Active = eventState?.status === 'ROUND_1_RUNNING';
+  const r2Active = eventState?.status === 'ROUND_2_RUNNING';
+  const r3Active = eventState?.status === 'ROUND_3_RUNNING';
+
+  const r1Concluded = ['ROUND_1_ENDED', 'ROUND_2_READY', 'ROUND_2_RUNNING', 'ROUND_2_ENDED', 'ROUND_3_READY', 'ROUND_3_RUNNING', 'COMPLETED'].includes(eventState?.status);
+  const r2Concluded = ['ROUND_2_ENDED', 'ROUND_3_READY', 'ROUND_3_RUNNING', 'COMPLETED'].includes(eventState?.status);
+  const r3Concluded = ['ROUND_3_ENDED', 'COMPLETED'].includes(eventState?.status);
+
   const r1Unlocked = isRoundUnlocked(1);
   const r2Unlocked = isRoundUnlocked(2);
   const r3Unlocked = isRoundUnlocked(3);
 
-  const r1Active = isRoundActive ? isRoundActive(1) : (eventState?.status === 'ROUND_1_RUNNING');
-  const r2Active = isRoundActive ? isRoundActive(2) : (eventState?.status === 'ROUND_2_RUNNING');
-  const r3Active = isRoundActive ? isRoundActive(3) : (eventState?.status === 'ROUND_3_RUNNING');
-
-  const r1Done = isRoundCompleted ? isRoundCompleted(1) : (r1Score > 0 || eventState?.status === 'ROUND_1_ENDED');
-  const r2Done = isRoundCompleted ? isRoundCompleted(2) : (r2Score > 0 || eventState?.status === 'ROUND_2_ENDED');
+  const r1Done = r1UserDone || r1Concluded;
+  const r2Done = r2UserDone || r2Concluded;
+  const r3Done = r3UserDone || r3Concluded;
 
   // Render Sub-Views based on Navigation Selection
   const renderWorkspaceContent = () => {
@@ -202,7 +218,9 @@ export default function Dashboard() {
                 <div key={a.id} className="bg-white dark:bg-[#141417] p-5 rounded-2xl border border-zinc-200 dark:border-[#27272a] space-y-2 card-hover-lift card-shimmer card-border-glow">
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-[#D60303] text-sm font-mono">{a.title}</span>
-                    <span className="text-[10px] text-zinc-400 font-mono bg-zinc-100 dark:bg-[#09090b] px-2.5 py-1 rounded-md">{a.time}</span>
+                    <span className="text-[10px] text-zinc-400 font-mono bg-zinc-100 dark:bg-[#09090b] px-2.5 py-1 rounded-md">
+                      {formatAnnouncementTime ? formatAnnouncementTime(a) : (a.time || 'Just now')}
+                    </span>
                   </div>
                   <p className="text-xs text-zinc-700 dark:text-[#a1a1aa] leading-relaxed">{a.message}</p>
                 </div>
@@ -370,44 +388,51 @@ export default function Dashboard() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-stretch">
             {/* Round 1 Card */}
-            {!r1Unlocked ? (
+            {r1UserDone ? (
               <div 
                 onClick={() => {
-                  alert('🔒 Round 1 is currently locked!\nIt will be activated as soon as the Lab Coordinator initiates Round 1.');
+                  alert(`🔒 You have already completed and submitted Round 1.\nYour Official Score: ${r1Score} / 20 pts.\nRe-attempts are not permitted.`);
+                }}
+                className="p-4 rounded-2xl border border-emerald-500/50 bg-emerald-500/10 dark:bg-emerald-950/20 shadow-xs flex flex-col justify-between space-y-3 cursor-not-allowed transition-all duration-200"
+              >
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 font-mono">ROUND 1</span>
+                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-[10px] font-mono font-bold border border-emerald-500/30 flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" /> COMPLETED & LOCKED
+                    </span>
+                  </div>
+                  <h4 className="text-sm font-bold text-zinc-900 dark:text-white">Tech Quiz Workstation</h4>
+                  <p className="text-[11px] text-[#595959] dark:text-[#a1a1aa]">Your 20 MCQ responses are scored and securely locked.</p>
+                </div>
+
+                <div className="pt-3 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between text-[11px]">
+                  <span className="font-mono text-emerald-600 dark:text-emerald-400 font-bold">Score: {r1Score} / 20 pts</span>
+                  <span className="text-[10px] font-mono text-zinc-400 font-bold">Locked</span>
+                </div>
+              </div>
+            ) : r1Concluded && !r1Active ? (
+              <div 
+                onClick={() => {
+                  alert('🔒 Round 1 has concluded and is closed by the Lab Coordinator.');
                 }}
                 className="relative overflow-hidden rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80 bg-zinc-100/50 dark:bg-zinc-950/40 cursor-not-allowed group transition-all duration-300 shadow-sm"
               >
-                {/* Blurred background content */}
-                <div className="p-4 flex flex-col justify-between space-y-3 filter blur-[3px] opacity-35 select-none pointer-events-none">
+                <div className="p-4 flex flex-col justify-between space-y-3 filter blur-[2px] opacity-30 select-none pointer-events-none">
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-zinc-900 dark:text-white font-mono">ROUND 1</span>
-                      <span className="px-2.5 py-0.5 rounded-full bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 text-[10px] font-mono font-bold flex items-center gap-1">
-                        <Lock className="w-3 h-3" /> LOCKED
-                      </span>
+                      <span className="text-xs font-bold font-mono">ROUND 1</span>
+                      <span className="text-[10px] font-mono font-bold">CONCLUDED</span>
                     </div>
-                    <h4 className="text-sm font-bold text-zinc-900 dark:text-white">Tech Quiz Workstation</h4>
-                    <p className="text-[11px] text-[#595959] dark:text-[#a1a1aa]">20 randomized CS MCQs. Auto-advancing option selection.</p>
-                  </div>
-                  <div className="pt-3 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between text-[11px]">
-                    <span className="font-mono text-zinc-400 font-bold">20 Mins • Single Attempt</span>
-                    <ChevronRight className="w-4 h-4 text-zinc-400" />
+                    <h4 className="text-sm font-bold">Tech Quiz Workstation</h4>
                   </div>
                 </div>
-
-                {/* Frosted Glass Lock Overlay */}
-                <div className="absolute inset-0 z-10 bg-zinc-900/35 dark:bg-black/60 backdrop-blur-[3px] flex flex-col items-center justify-center gap-2 p-3 text-center transition-all group-hover:bg-zinc-900/45 dark:group-hover:bg-black/70">
-                  <div className="w-10 h-10 rounded-2xl bg-zinc-900/90 dark:bg-zinc-900/95 border border-red-500/60 text-red-500 flex items-center justify-center shadow-lg shadow-red-950/30 group-hover:scale-110 transition-transform">
-                    <Lock className="w-5 h-5 text-red-500" />
+                <div className="absolute inset-0 z-10 bg-zinc-900/40 dark:bg-black/70 backdrop-blur-[2px] flex flex-col items-center justify-center gap-2 p-3 text-center">
+                  <div className="w-9 h-9 rounded-xl bg-zinc-900 border border-zinc-700 text-zinc-400 flex items-center justify-center">
+                    <Lock className="w-4 h-4 text-zinc-300" />
                   </div>
-                  <div className="space-y-0.5">
-                    <span className="font-mono font-bold text-[11px] text-red-400 uppercase tracking-wider block">
-                      ROUND 1 LOCKED
-                    </span>
-                    <p className="text-[10px] text-zinc-300 dark:text-zinc-400 font-mono">
-                      Awaiting Coordinator Start
-                    </p>
-                  </div>
+                  <span className="font-mono font-bold text-[11px] text-zinc-300 uppercase tracking-wider">ROUND 1 CLOSED</span>
+                  <p className="text-[10px] text-zinc-400 font-mono">Round Ended by Coordinator</p>
                 </div>
               </div>
             ) : r1Active ? (
@@ -424,11 +449,11 @@ export default function Dashboard() {
                     </span>
                   </div>
                   <h4 className="text-sm font-black text-zinc-900 dark:text-white">Tech Quiz Workstation</h4>
-                  <p className="text-[11px] text-[#595959] dark:text-[#a1a1aa]">20 randomized CS MCQs. Timed assessment.</p>
+                  <p className="text-[11px] text-[#595959] dark:text-[#a1a1aa]">20 randomized CS MCQs. 10 Mins Assessment.</p>
                 </div>
 
                 <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between text-[11px]">
-                  <span className="font-mono text-red-600 dark:text-red-400 font-bold">Score: {r1Score} pts</span>
+                  <span className="font-mono text-red-600 dark:text-red-400 font-bold">Max: 20 pts</span>
                   <span className="flex items-center gap-1 font-bold text-xs text-red-600 dark:text-red-400">
                     <span>Launch</span>
                     <ChevronRight className="w-4 h-4" />
@@ -437,66 +462,89 @@ export default function Dashboard() {
               </div>
             ) : (
               <div 
-                onClick={() => navigateToRound('round1')}
-                className="p-4 rounded-2xl border border-emerald-500/40 bg-white/80 dark:bg-zinc-900/60 shadow-xs flex flex-col justify-between space-y-3 cursor-pointer transition-all duration-200 card-hover-lift"
-              >
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300 font-mono">ROUND 1</span>
-                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-500 text-[10px] font-mono font-bold border border-emerald-500/30 flex items-center gap-1">
-                      <CheckCircle2 className="w-3 h-3" /> COMPLETED
-                    </span>
-                  </div>
-                  <h4 className="text-sm font-bold text-zinc-900 dark:text-white">Tech Quiz Workstation</h4>
-                  <p className="text-[11px] text-[#595959] dark:text-[#a1a1aa]">Quiz module completed & submitted.</p>
-                </div>
-
-                <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between text-[11px]">
-                  <span className="font-mono text-emerald-600 dark:text-emerald-400 font-bold">Score: {r1Score} pts</span>
-                  <ChevronRight className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                </div>
-              </div>
-            )}
-
-            {/* Round 2 Card */}
-            {!r2Unlocked ? (
-              <div 
                 onClick={() => {
-                  alert('🔒 Round 2 is currently locked!\nIt will be activated as soon as the Lab Coordinator initiates Round 2.');
+                  alert('🔒 Round 1 is currently locked!\nIt will be activated as soon as the Lab Coordinator initiates Round 1.');
                 }}
                 className="relative overflow-hidden rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80 bg-zinc-100/50 dark:bg-zinc-950/40 cursor-not-allowed group transition-all duration-300 shadow-sm"
               >
-                {/* Blurred background content */}
                 <div className="p-4 flex flex-col justify-between space-y-3 filter blur-[3px] opacity-35 select-none pointer-events-none">
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-zinc-900 dark:text-white font-mono">ROUND 2</span>
+                      <span className="text-xs font-bold text-zinc-900 dark:text-white font-mono">ROUND 1</span>
                       <span className="px-2.5 py-0.5 rounded-full bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 text-[10px] font-mono font-bold flex items-center gap-1">
                         <Lock className="w-3 h-3" /> LOCKED
                       </span>
                     </div>
-                    <h4 className="text-sm font-bold text-zinc-900 dark:text-white">Debug It Workstation</h4>
-                    <p className="text-[11px] text-[#595959] dark:text-[#a1a1aa]">3 Debugging problems. Physical coordinator PIN verification.</p>
+                    <h4 className="text-sm font-bold text-zinc-900 dark:text-white">Tech Quiz Workstation</h4>
+                    <p className="text-[11px] text-[#595959] dark:text-[#a1a1aa]">20 randomized CS MCQs. Auto-advancing option selection.</p>
                   </div>
                   <div className="pt-3 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between text-[11px]">
-                    <span className="font-mono text-zinc-400 font-bold">C • Python • Java</span>
+                    <span className="font-mono text-zinc-400 font-bold">10 Mins • Single Attempt</span>
                     <ChevronRight className="w-4 h-4 text-zinc-400" />
                   </div>
                 </div>
-
-                {/* Frosted Glass Lock Overlay */}
                 <div className="absolute inset-0 z-10 bg-zinc-900/35 dark:bg-black/60 backdrop-blur-[3px] flex flex-col items-center justify-center gap-2 p-3 text-center transition-all group-hover:bg-zinc-900/45 dark:group-hover:bg-black/70">
                   <div className="w-10 h-10 rounded-2xl bg-zinc-900/90 dark:bg-zinc-900/95 border border-red-500/60 text-red-500 flex items-center justify-center shadow-lg shadow-red-950/30 group-hover:scale-110 transition-transform">
                     <Lock className="w-5 h-5 text-red-500" />
                   </div>
                   <div className="space-y-0.5">
                     <span className="font-mono font-bold text-[11px] text-red-400 uppercase tracking-wider block">
-                      ROUND 2 LOCKED
+                      ROUND 1 LOCKED
                     </span>
                     <p className="text-[10px] text-zinc-300 dark:text-zinc-400 font-mono">
                       Awaiting Coordinator Start
                     </p>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* Round 2 Card */}
+            {r2UserDone ? (
+              <div 
+                onClick={() => {
+                  alert(`🔒 You have already completed Round 2.\nYour Official Score: ${r2Score} / 30 pts.\nRe-attempts are not permitted.`);
+                }}
+                className="p-4 rounded-2xl border border-emerald-500/50 bg-emerald-500/10 dark:bg-emerald-950/20 shadow-xs flex flex-col justify-between space-y-3 cursor-not-allowed transition-all duration-200"
+              >
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 font-mono">ROUND 2</span>
+                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-[10px] font-mono font-bold border border-emerald-500/30 flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" /> COMPLETED & LOCKED
+                    </span>
+                  </div>
+                  <h4 className="text-sm font-bold text-zinc-900 dark:text-white">Debug It Workstation</h4>
+                  <p className="text-[11px] text-[#595959] dark:text-[#a1a1aa]">Debugging problem submissions verified and recorded.</p>
+                </div>
+
+                <div className="pt-3 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between text-[11px]">
+                  <span className="font-mono text-emerald-600 dark:text-emerald-400 font-bold">Score: {r2Score} / 30 pts</span>
+                  <span className="text-[10px] font-mono text-zinc-400 font-bold">Locked</span>
+                </div>
+              </div>
+            ) : r2Concluded && !r2Active ? (
+              <div 
+                onClick={() => {
+                  alert('🔒 Round 2 has concluded and is closed by the Lab Coordinator.');
+                }}
+                className="relative overflow-hidden rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80 bg-zinc-100/50 dark:bg-zinc-950/40 cursor-not-allowed group transition-all duration-300 shadow-sm"
+              >
+                <div className="p-4 flex flex-col justify-between space-y-3 filter blur-[2px] opacity-30 select-none pointer-events-none">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold font-mono">ROUND 2</span>
+                      <span className="text-[10px] font-mono font-bold">CONCLUDED</span>
+                    </div>
+                    <h4 className="text-sm font-bold">Debug It Workstation</h4>
+                  </div>
+                </div>
+                <div className="absolute inset-0 z-10 bg-zinc-900/40 dark:bg-black/70 backdrop-blur-[2px] flex flex-col items-center justify-center gap-2 p-3 text-center">
+                  <div className="w-9 h-9 rounded-xl bg-zinc-900 border border-zinc-700 text-zinc-400 flex items-center justify-center">
+                    <Lock className="w-4 h-4 text-zinc-300" />
+                  </div>
+                  <span className="font-mono font-bold text-[11px] text-zinc-300 uppercase tracking-wider">ROUND 2 CLOSED</span>
+                  <p className="text-[10px] text-zinc-400 font-mono">Round Ended by Coordinator</p>
                 </div>
               </div>
             ) : r2Active ? (
@@ -513,11 +561,11 @@ export default function Dashboard() {
                     </span>
                   </div>
                   <h4 className="text-sm font-black text-zinc-900 dark:text-white">Debug It Workstation</h4>
-                  <p className="text-[11px] text-[#595959] dark:text-[#a1a1aa]">3 Debugging problems. Physical coordinator PIN verification required.</p>
+                  <p className="text-[11px] text-[#595959] dark:text-[#a1a1aa]">3 Debugging problems. 15 Mins Assessment.</p>
                 </div>
 
                 <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between text-[11px]">
-                  <span className="font-mono text-red-600 dark:text-red-400 font-bold">Score: {r2Score} pts</span>
+                  <span className="font-mono text-red-600 dark:text-red-400 font-bold">Max: 30 pts</span>
                   <span className="flex items-center gap-1 font-bold text-xs text-red-600 dark:text-red-400">
                     <span>Launch</span>
                     <ChevronRight className="w-4 h-4" />
@@ -526,66 +574,89 @@ export default function Dashboard() {
               </div>
             ) : (
               <div 
-                onClick={() => navigateToRound('round2')}
-                className="p-4 rounded-2xl border border-emerald-500/40 bg-white/80 dark:bg-zinc-900/60 shadow-xs flex flex-col justify-between space-y-3 cursor-pointer transition-all duration-200 card-hover-lift"
-              >
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300 font-mono">ROUND 2</span>
-                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-500 text-[10px] font-mono font-bold border border-emerald-500/30 flex items-center gap-1">
-                      <CheckCircle2 className="w-3 h-3" /> COMPLETED
-                    </span>
-                  </div>
-                  <h4 className="text-sm font-bold text-zinc-900 dark:text-white">Debug It Workstation</h4>
-                  <p className="text-[11px] text-[#595959] dark:text-[#a1a1aa]">Debugging problems verified & recorded.</p>
-                </div>
-
-                <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between text-[11px]">
-                  <span className="font-mono text-emerald-600 dark:text-emerald-400 font-bold">Score: {r2Score} pts</span>
-                  <ChevronRight className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                </div>
-              </div>
-            )}
-
-            {/* Round 3 Card */}
-            {!r3Unlocked ? (
-              <div 
                 onClick={() => {
-                  alert('🔒 Round 3 is currently locked!\nIt will be activated as soon as the Lab Coordinator initiates Round 3.');
+                  alert('🔒 Round 2 is currently locked!\nIt will be activated as soon as the Lab Coordinator initiates Round 2.');
                 }}
                 className="relative overflow-hidden rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80 bg-zinc-100/50 dark:bg-zinc-950/40 cursor-not-allowed group transition-all duration-300 shadow-sm"
               >
-                {/* Blurred background content */}
                 <div className="p-4 flex flex-col justify-between space-y-3 filter blur-[3px] opacity-35 select-none pointer-events-none">
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-zinc-900 dark:text-white font-mono">ROUND 3</span>
+                      <span className="text-xs font-bold text-zinc-900 dark:text-white font-mono">ROUND 2</span>
                       <span className="px-2.5 py-0.5 rounded-full bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 text-[10px] font-mono font-bold flex items-center gap-1">
                         <Lock className="w-3 h-3" /> LOCKED
                       </span>
                     </div>
-                    <h4 className="text-sm font-bold text-zinc-900 dark:text-white">Campus Tech Hunt</h4>
-                    <p className="text-[11px] text-[#595959] dark:text-[#a1a1aa]">5 Station clues. Reach the symposium podium.</p>
+                    <h4 className="text-sm font-bold text-zinc-900 dark:text-white">Debug It Workstation</h4>
+                    <p className="text-[11px] text-[#595959] dark:text-[#a1a1aa]">3 Debugging problems. Physical coordinator PIN verification.</p>
                   </div>
                   <div className="pt-3 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between text-[11px]">
-                    <span className="font-mono text-zinc-400 font-bold">Campus Clues • Podium</span>
+                    <span className="font-mono text-zinc-400 font-bold">15 Mins • 30 Marks</span>
                     <ChevronRight className="w-4 h-4 text-zinc-400" />
                   </div>
                 </div>
-
-                {/* Frosted Glass Lock Overlay */}
                 <div className="absolute inset-0 z-10 bg-zinc-900/35 dark:bg-black/60 backdrop-blur-[3px] flex flex-col items-center justify-center gap-2 p-3 text-center transition-all group-hover:bg-zinc-900/45 dark:group-hover:bg-black/70">
                   <div className="w-10 h-10 rounded-2xl bg-zinc-900/90 dark:bg-zinc-900/95 border border-red-500/60 text-red-500 flex items-center justify-center shadow-lg shadow-red-950/30 group-hover:scale-110 transition-transform">
                     <Lock className="w-5 h-5 text-red-500" />
                   </div>
                   <div className="space-y-0.5">
                     <span className="font-mono font-bold text-[11px] text-red-400 uppercase tracking-wider block">
-                      ROUND 3 LOCKED
+                      ROUND 2 LOCKED
                     </span>
                     <p className="text-[10px] text-zinc-300 dark:text-zinc-400 font-mono">
                       Awaiting Coordinator Start
                     </p>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* Round 3 Card */}
+            {r3UserDone ? (
+              <div 
+                onClick={() => {
+                  alert(`🔒 You have already completed Round 3.\nYour Official Score: ${r3Score} / 50 pts.\nRe-attempts are not permitted.`);
+                }}
+                className="p-4 rounded-2xl border border-emerald-500/50 bg-emerald-500/10 dark:bg-emerald-950/20 shadow-xs flex flex-col justify-between space-y-3 cursor-not-allowed transition-all duration-200"
+              >
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 font-mono">ROUND 3</span>
+                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-[10px] font-mono font-bold border border-emerald-500/30 flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" /> COMPLETED & LOCKED
+                    </span>
+                  </div>
+                  <h4 className="text-sm font-bold text-zinc-900 dark:text-white">Campus Tech Hunt</h4>
+                  <p className="text-[11px] text-[#595959] dark:text-[#a1a1aa]">Campus clues solved and final stations submitted.</p>
+                </div>
+
+                <div className="pt-3 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between text-[11px]">
+                  <span className="font-mono text-emerald-600 dark:text-emerald-400 font-bold">Score: {r3Score} / 50 pts</span>
+                  <span className="text-[10px] font-mono text-zinc-400 font-bold">Locked</span>
+                </div>
+              </div>
+            ) : r3Concluded && !r3Active ? (
+              <div 
+                onClick={() => {
+                  alert('🔒 Round 3 has concluded and is closed by the Lab Coordinator.');
+                }}
+                className="relative overflow-hidden rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80 bg-zinc-100/50 dark:bg-zinc-950/40 cursor-not-allowed group transition-all duration-300 shadow-sm"
+              >
+                <div className="p-4 flex flex-col justify-between space-y-3 filter blur-[2px] opacity-30 select-none pointer-events-none">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold font-mono">ROUND 3</span>
+                      <span className="text-[10px] font-mono font-bold">CONCLUDED</span>
+                    </div>
+                    <h4 className="text-sm font-bold">Campus Tech Hunt</h4>
+                  </div>
+                </div>
+                <div className="absolute inset-0 z-10 bg-zinc-900/40 dark:bg-black/70 backdrop-blur-[2px] flex flex-col items-center justify-center gap-2 p-3 text-center">
+                  <div className="w-9 h-9 rounded-xl bg-zinc-900 border border-zinc-700 text-zinc-400 flex items-center justify-center">
+                    <Lock className="w-4 h-4 text-zinc-300" />
+                  </div>
+                  <span className="font-mono font-bold text-[11px] text-zinc-300 uppercase tracking-wider">ROUND 3 CLOSED</span>
+                  <p className="text-[10px] text-zinc-400 font-mono">Symposium Championship Concluded</p>
                 </div>
               </div>
             ) : r3Active ? (
@@ -606,7 +677,7 @@ export default function Dashboard() {
                 </div>
 
                 <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between text-[11px]">
-                  <span className="font-mono text-red-600 dark:text-red-400 font-bold">Final Podium</span>
+                  <span className="font-mono text-red-600 dark:text-red-400 font-bold">Max: 50 pts</span>
                   <span className="flex items-center gap-1 font-bold text-xs text-red-600 dark:text-red-400">
                     <span>Launch</span>
                     <ChevronRight className="w-4 h-4" />
@@ -615,23 +686,39 @@ export default function Dashboard() {
               </div>
             ) : (
               <div 
-                onClick={() => navigateToRound('round3')}
-                className="p-4 rounded-2xl border border-emerald-500/40 bg-white/80 dark:bg-zinc-900/60 shadow-xs flex flex-col justify-between space-y-3 cursor-pointer transition-all duration-200 card-hover-lift"
+                onClick={() => {
+                  alert('🔒 Round 3 is currently locked!\nIt will be activated as soon as the Lab Coordinator initiates Round 3.');
+                }}
+                className="relative overflow-hidden rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80 bg-zinc-100/50 dark:bg-zinc-950/40 cursor-not-allowed group transition-all duration-300 shadow-sm"
               >
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300 font-mono">ROUND 3</span>
-                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-500 text-[10px] font-mono font-bold border border-emerald-500/30 flex items-center gap-1">
-                      <CheckCircle2 className="w-3 h-3" /> COMPLETED
-                    </span>
+                <div className="p-4 flex flex-col justify-between space-y-3 filter blur-[3px] opacity-35 select-none pointer-events-none">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-zinc-900 dark:text-white font-mono">ROUND 3</span>
+                      <span className="px-2.5 py-0.5 rounded-full bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 text-[10px] font-mono font-bold flex items-center gap-1">
+                        <Lock className="w-3 h-3" /> LOCKED
+                      </span>
+                    </div>
+                    <h4 className="text-sm font-bold text-zinc-900 dark:text-white">Campus Tech Hunt</h4>
+                    <p className="text-[11px] text-[#595959] dark:text-[#a1a1aa]">5 Station clues. Reach the symposium podium.</p>
                   </div>
-                  <h4 className="text-sm font-bold text-zinc-900 dark:text-white">Campus Tech Hunt</h4>
-                  <p className="text-[11px] text-[#595959] dark:text-[#a1a1aa]">Tech Hunt completed.</p>
+                  <div className="pt-3 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between text-[11px]">
+                    <span className="font-mono text-zinc-400 font-bold">15 Mins • 50 Marks</span>
+                    <ChevronRight className="w-4 h-4 text-zinc-400" />
+                  </div>
                 </div>
-
-                <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between text-[11px]">
-                  <span className="font-mono text-emerald-600 dark:text-emerald-400 font-bold">Symposium Finish</span>
-                  <ChevronRight className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                <div className="absolute inset-0 z-10 bg-zinc-900/35 dark:bg-black/60 backdrop-blur-[3px] flex flex-col items-center justify-center gap-2 p-3 text-center transition-all group-hover:bg-zinc-900/45 dark:group-hover:bg-black/70">
+                  <div className="w-10 h-10 rounded-2xl bg-zinc-900/90 dark:bg-zinc-900/95 border border-red-500/60 text-red-500 flex items-center justify-center shadow-lg shadow-red-950/30 group-hover:scale-110 transition-transform">
+                    <Lock className="w-5 h-5 text-red-500" />
+                  </div>
+                  <div className="space-y-0.5">
+                    <span className="font-mono font-bold text-[11px] text-red-400 uppercase tracking-wider block">
+                      ROUND 3 LOCKED
+                    </span>
+                    <p className="text-[10px] text-zinc-300 dark:text-zinc-400 font-mono">
+                      Awaiting Coordinator Start
+                    </p>
+                  </div>
                 </div>
               </div>
             )}
@@ -760,8 +847,11 @@ export default function Dashboard() {
                       <span className="font-bold text-zinc-900 dark:text-white text-sm">20 MCQs</span>
                     </div>
                     <div className="p-3 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800">
-                      <span className="text-[10px] text-zinc-400 font-mono block uppercase">Duration</span>
-                      <span className="font-bold text-zinc-900 dark:text-white text-sm">20 Minutes</span>
+                      <span className="text-[10px] text-zinc-400 font-mono block uppercase">Remaining Time</span>
+                      <span className="font-bold text-[#D60303] text-sm flex items-center gap-1">
+                        <Clock className="w-3.5 h-3.5 animate-pulse" />
+                        <span>{roundTimeLeft > 0 ? formatRoundTime(roundTimeLeft) : '20:00'}</span>
+                      </span>
                     </div>
                     <div className="p-3 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800">
                       <span className="text-[10px] text-zinc-400 font-mono block uppercase">Anti-Cheat</span>
@@ -781,13 +871,13 @@ export default function Dashboard() {
               </div>
             )}
 
-            {/* CASE 3: ROUND 2 IS ACTIVE (INTERACTIVE DEBUG WORKSPACE) */}
+            {/* CASE 3: ROUND 2 IS ACTIVE */}
             {r2Active && (
               <div className="bg-white/80 dark:bg-[#141417]/90 backdrop-blur-md p-6 rounded-2xl border-2 border-[#D60303] shadow-md space-y-6 card-hover-lift card-border-glow animate-slide-up">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-[#D60303]/10 text-[#D60303] flex items-center justify-center">
-                      <FileCode2 className="w-5 h-5" />
+                    <div className="w-10 h-10 rounded-xl bg-[#D60303]/10 text-[#D60303] flex items-center justify-center font-bold">
+                      <FileCode2 className="w-6 h-6 text-[#D60303]" />
                     </div>
                     <div>
                       <span className="text-[10px] font-bold text-[#D60303] uppercase tracking-widest font-mono">ROUND 2 ACTIVE</span>
@@ -795,132 +885,39 @@ export default function Dashboard() {
                     </div>
                   </div>
 
-                  <span className="px-3 py-1 rounded-full bg-[#D60303] text-white text-[11px] font-mono font-bold tracking-wider uppercase animate-pulse">
-                    ACTIVE
+                  <span className="px-3 py-1 rounded-full bg-[#D60303] text-white text-[11px] font-mono font-bold tracking-wider uppercase flex items-center gap-1.5 shadow-xs animate-pulse">
+                    <Clock className="w-3.5 h-3.5" />
+                    <span>{roundTimeLeft > 0 ? formatRoundTime(roundTimeLeft) : '15:00'}</span>
                   </span>
                 </div>
 
-                <p className="text-xs text-[#595959] dark:text-[#a1a1aa] font-medium">
-                  Identify syntax & logical errors, execute locally, then request coordinator physical verification.
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
+                    <span className="text-[10px] font-mono text-zinc-500 uppercase block">Round Duration</span>
+                    <span className="text-sm font-bold text-zinc-900 dark:text-white font-mono">15 Minutes</span>
+                  </div>
+                  <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
+                    <span className="text-[10px] font-mono text-zinc-500 uppercase block">Problems</span>
+                    <span className="text-sm font-bold text-zinc-900 dark:text-white font-mono">3 Questions × 10 Marks</span>
+                  </div>
+                  <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
+                    <span className="text-[10px] font-mono text-zinc-500 uppercase block">Total Weightage</span>
+                    <span className="text-sm font-bold text-[#D60303] font-mono">30 Marks</span>
+                  </div>
+                </div>
+
+                <p className="text-xs text-[#595959] dark:text-[#a1a1aa] font-medium leading-relaxed">
+                  Identify syntax and logical errors across 3 coding challenges (C, Python, Java). You are permitted to execute code in your local editor/terminal. Once corrected, call the assigned Lab Coordinator for physical PIN verification and scoring.
                 </p>
 
-                {debugProblems.length === 0 ? (
-                  <div className="p-8 text-center bg-[#F8F7F4] dark:bg-[#09090b] rounded-xl border border-zinc-200 dark:border-[#27272a] text-[#595959] dark:text-[#a1a1aa] text-xs font-medium">
-                    No debugging problems are currently available.
-                  </div>
-                ) : (
-                  <>
-                    <div className="flex items-center gap-2 border-b border-zinc-200 dark:border-[#27272a] pb-2 text-xs">
-                      {debugProblems.map(p => (
-                        <button
-                          key={p.id}
-                          onClick={() => {
-                            setActiveProblemId(p.id);
-                            setCorrectedCodeInput(debugSubmissions[p.id]?.code);
-                            setOutputInput(debugSubmissions[p.id]?.output);
-                          }}
-                          className={`px-3 py-1.5 rounded-lg font-bold transition-all duration-200 cursor-pointer btn-interactive ${
-                            activeProblemId === p.id 
-                              ? 'bg-[#D60303] text-white shadow-xs'
-                              : 'bg-zinc-100 dark:bg-[#09090b] border border-zinc-200 dark:border-[#27272a] text-zinc-700 dark:text-[#a1a1aa] hover:bg-zinc-200 dark:hover:bg-[#1a1a1e]'
-                          }`}
-                        >
-                          Problem {p.id}
-                        </button>
-                      ))}
-                    </div>
-
-                    {currentProblem && (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-slide-up">
-                        <div className="bg-[#18181b] dark:bg-[#09090b] rounded-xl p-4 border border-zinc-700 dark:border-[#27272a] text-white space-y-3 flex flex-col justify-between shadow-xs">
-                          <div>
-                            <div className="flex items-center justify-between mb-2">
-                              <div className="flex items-center gap-2">
-                                <span className="w-5 h-5 rounded-full bg-[#D60303] text-white text-[11px] font-bold flex items-center justify-center font-mono">
-                                  {currentProblem.id}
-                                </span>
-                                <span className="text-xs font-bold text-white">{currentProblem.title}</span>
-                              </div>
-                              <span className="px-2 py-0.5 rounded bg-[#A30B1A] text-white text-[10px] font-mono font-bold">
-                                {currentProblem.difficulty}
-                              </span>
-                            </div>
-
-                            <p className="text-[11px] text-zinc-400 font-mono mb-2">Language: {currentProblem.language}</p>
-
-                            <div className="bg-black/80 p-3 rounded-lg border border-zinc-700 dark:border-[#27272a] font-mono text-[11px] leading-relaxed text-[#22c55e] relative overflow-x-auto max-h-48">
-                              <pre>{currentProblem.brokenCode}</pre>
-                            </div>
-                          </div>
-
-                          <div className="space-y-2 pt-2 border-t border-zinc-700 dark:border-[#27272a]">
-                            <button 
-                              onClick={() => setCurrentScreen('round2')}
-                              className="w-full py-2 rounded-lg bg-[#D60303] hover:bg-[#A30B1A] text-white text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer btn-interactive"
-                            >
-                              <BookOpen className="w-3.5 h-3.5" />
-                              <span>View Workstation Instructions</span>
-                            </button>
-                          </div>
-                        </div>
-
-                        <form onSubmit={handleUpdateSubmission} className="bg-white dark:bg-[#09090b] rounded-xl p-4 border border-zinc-200 dark:border-[#27272a] space-y-3 flex flex-col justify-between shadow-xs">
-                          <div className="space-y-3">
-                            <p className="text-xs font-bold text-zinc-900 dark:text-white flex items-center justify-between">
-                              <span>Your Submission</span>
-                              {submission.status === 'VERIFIED' && (
-                                <span className="text-[10px] text-emerald-600 dark:text-[#22c55e] font-bold flex items-center gap-1">
-                                  <CheckCircle2 className="w-3 h-3" /> VERIFIED ({submission.marks} Marks)
-                                </span>
-                              )}
-                            </p>
-
-                            <div>
-                              <label className="block text-[10px] font-bold text-zinc-600 dark:text-[#a1a1aa] mb-1 font-mono">Corrected Code</label>
-                              <textarea
-                                rows={3}
-                                value={correctedCodeInput}
-                                onChange={(e) => setCorrectedCodeInput(e.target.value)}
-                                className="w-full p-2 bg-[#F8F7F4] dark:bg-[#141417] border border-zinc-300 dark:border-[#27272a] rounded-lg font-mono text-[11px] text-zinc-900 dark:text-[#f4f4f5] focus:border-[#D60303] focus:outline-none transition-colors"
-                                placeholder="// Paste your corrected solution code here..."
-                              />
-                            </div>
-
-                            <div>
-                              <label className="block text-[10px] font-bold text-zinc-600 dark:text-[#a1a1aa] mb-1 font-mono">Terminal Output</label>
-                              <textarea
-                                rows={2}
-                                value={outputInput}
-                                onChange={(e) => setOutputInput(e.target.value)}
-                                className="w-full p-2 bg-[#F8F7F4] dark:bg-[#141417] border border-zinc-300 dark:border-[#27272a] rounded-lg font-mono text-[11px] text-zinc-900 dark:text-[#f4f4f5] focus:border-[#D60303] focus:outline-none transition-colors"
-                                placeholder="// Observed execution output..."
-                              />
-                            </div>
-                          </div>
-
-                          <div className="space-y-2 pt-2 border-t border-zinc-200 dark:border-[#27272a]">
-                            <button
-                              type="submit"
-                              className="w-full py-2 rounded-lg bg-zinc-100 dark:bg-[#141417] border border-zinc-300 dark:border-[#27272a] hover:bg-zinc-200 dark:hover:bg-[#1a1a1e] text-zinc-900 dark:text-white text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer btn-interactive"
-                            >
-                              <Send className="w-3.5 h-3.5 text-[#D60303]" />
-                              <span>Update Solution</span>
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => triggerVerificationModal(activeProblemId)}
-                              className="w-full py-2 rounded-lg bg-[#D60303] hover:bg-[#A30B1A] text-white text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs btn-interactive"
-                            >
-                              <Award className="w-3.5 h-3.5" />
-                              <span>Call Coordinator to Verify</span>
-                            </button>
-                          </div>
-                        </form>
-                      </div>
-                    )}
-                  </>
-                )}
+                <button 
+                  onClick={() => navigateToRound('round2')}
+                  className="w-full py-3.5 rounded-xl bg-[#D60303] hover:bg-[#A30B1A] text-white text-sm font-bold transition flex items-center justify-center gap-2 cursor-pointer shadow-md btn-interactive"
+                >
+                  <FileCode2 className="w-4 h-4" />
+                  <span>Launch Debug It Workstation</span>
+                  <ChevronRight className="w-4 h-4" />
+                </button>
               </div>
             )}
 
@@ -938,8 +935,9 @@ export default function Dashboard() {
                     </div>
                   </div>
 
-                  <span className="px-3 py-1 rounded-full bg-emerald-600 text-white text-[10px] font-mono font-bold tracking-wider uppercase animate-pulse">
-                    • FINAL STAGE
+                  <span className="px-3 py-1 rounded-full bg-[#D60303] text-white text-[11px] font-mono font-bold tracking-wider uppercase flex items-center gap-1.5 shadow-xs">
+                    <Clock className="w-3.5 h-3.5 animate-pulse" />
+                    <span>R3 LIVE: {roundTimeLeft > 0 ? formatRoundTime(roundTimeLeft) : '40:00'}</span>
                   </span>
                 </div>
 
@@ -1004,19 +1002,45 @@ export default function Dashboard() {
           {/* Right Column: Quick Stats & Announcements */}
           <div className="space-y-6">
             <div className="bg-white dark:bg-[#141417] p-5 rounded-2xl border border-zinc-200 dark:border-[#27272a] shadow-sm space-y-4 card-hover-lift card-border-glow">
-              <h3 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-2 font-mono">
-                <span className="text-[#D60303]">★</span> Live Score Summary
-              </h3>
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-2 font-mono">
+                  <span className="text-[#D60303]">★</span> Live Score Summary
+                </h3>
+                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+                  Official Scorecard
+                </span>
+              </div>
 
-              <div className="space-y-2 text-xs border-t border-zinc-100 dark:border-[#27272a] pt-3">
+              <div className="space-y-2.5 text-xs border-t border-zinc-100 dark:border-[#27272a] pt-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-[#595959] dark:text-[#a1a1aa] font-semibold">Round 1 Quiz Score</span>
-                  <span className="font-bold text-[#A30B1A] dark:text-[#ef4444] font-mono">{r1Score} pts</span>
+                  <span className="text-[#595959] dark:text-[#a1a1aa] font-semibold">Round 1 (Tech Quiz)</span>
+                  <span className="font-bold text-zinc-900 dark:text-white font-mono">{r1Score} / 20 pts</span>
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <span className="text-[#595959] dark:text-[#a1a1aa] font-semibold">Round 2 Debug Score</span>
-                  <span className="font-bold text-[#D60303] font-mono">{r2Score} pts</span>
+                  <span className="text-[#595959] dark:text-[#a1a1aa] font-semibold">Round 2 (Debug It)</span>
+                  <span className="font-bold text-zinc-900 dark:text-white font-mono">{r2Score} / 30 pts</span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-[#595959] dark:text-[#a1a1aa] font-semibold">Round 3 (Tech Hunt)</span>
+                  <span className="font-bold text-zinc-900 dark:text-white font-mono">{r3Score} / 50 pts</span>
+                </div>
+
+                <div className="pt-2 border-t border-zinc-200 dark:border-[#27272a] flex items-center justify-between">
+                  <span className="font-bold text-zinc-900 dark:text-white font-mono">Grand Cumulative Total</span>
+                  <span className="font-black text-sm text-[#D60303] font-mono">{totalScore} / 100 pts</span>
+                </div>
+
+                <div className="pt-1 flex items-center justify-between text-[11px] font-mono">
+                  <span className="text-zinc-500">Attainment Band:</span>
+                  <span className={`px-2 py-0.5 rounded font-bold ${
+                    grandBand === 'Excellent' ? 'bg-emerald-500/10 text-emerald-600' :
+                    grandBand === 'Good' ? 'bg-amber-500/10 text-amber-600' :
+                    'bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400'
+                  }`}>
+                    {grandBand}
+                  </span>
                 </div>
               </div>
             </div>
@@ -1037,7 +1061,9 @@ export default function Dashboard() {
                     <div key={a.id} className="p-3 bg-[#F8F7F4] dark:bg-[#09090b] rounded-xl border border-zinc-200 dark:border-[#27272a] space-y-1 transition-all hover:border-[#D60303]">
                       <div className="flex items-center justify-between">
                         <span className="font-bold text-[#A30B1A] dark:text-[#ef4444] text-[11px]">{a.title}</span>
-                        <span className="text-[10px] text-[#595959] dark:text-[#71717a] font-mono">{a.time}</span>
+                        <span className="text-[10px] text-[#595959] dark:text-[#71717a] font-mono">
+                          {formatAnnouncementTime ? formatAnnouncementTime(a) : (a.time || 'Just now')}
+                        </span>
                       </div>
                       <p className="text-[11px] text-zinc-700 dark:text-[#a1a1aa] leading-snug font-medium">{a.message}</p>
                     </div>

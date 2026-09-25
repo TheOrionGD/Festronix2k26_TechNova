@@ -128,9 +128,8 @@ export default function Sidebar() {
           <div className="flex items-center justify-between px-3 mb-2">
             <p className="text-[11px] font-bold text-red-600 dark:text-red-400 uppercase tracking-wider font-mono">{primaryTitle}</p>
             {role && (
-              <span className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded ${
-                role === 'ADMIN' ? 'bg-red-500 text-white' : role === 'COORDINATOR' ? 'bg-amber-500 text-white' : 'bg-emerald-600 text-white'
-              }`}>
+              <span className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded ${role === 'ADMIN' ? 'bg-red-500 text-white' : role === 'COORDINATOR' ? 'bg-amber-500 text-white' : 'bg-emerald-600 text-white'
+                }`}>
                 {role}
               </span>
             )}
@@ -150,11 +149,10 @@ export default function Sidebar() {
                     setCurrentScreen(item.targetScreen);
                   }
                 }}
-                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 group cursor-pointer border ${
-                  isActive
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 group cursor-pointer border ${isActive
                     ? 'bg-[#D60303] text-white border-red-400 shadow-md transform translate-x-1'
                     : 'bg-[#D60303] text-white border-red-500/70 hover:bg-[#A30B1A] hover:translate-x-1'
-                }`}
+                  }`}
               >
                 <div className="flex items-center gap-3">
                   <Icon className="w-4 h-4 text-white transition-transform duration-200 group-hover:scale-110 shrink-0" />
@@ -187,11 +185,10 @@ export default function Sidebar() {
                 <button
                   key={item.id}
                   onClick={() => setCurrentScreen(item.targetScreen)}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-200 cursor-pointer border ${
-                    isActive
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-200 cursor-pointer border ${isActive
                       ? 'bg-[#A30B1A] text-white border-red-400 transform translate-x-1'
                       : 'bg-[#D60303] text-white border-red-500/70 hover:bg-[#A30B1A] hover:translate-x-1'
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center gap-3">
                     <Icon className="w-4 h-4 text-white shrink-0" />
@@ -220,7 +217,7 @@ export default function Sidebar() {
             TECHNOVA 2026
           </p>
           <p className="text-[9px] font-mono text-zinc-400/80 dark:text-zinc-600/80 mt-1 select-none font-medium">
-            The system is built using Antigravity
+            The system is built for TechNova
           </p>
         </div>
       </div>
