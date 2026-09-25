@@ -1430,10 +1430,14 @@ async function computeLeaderboardData() {
   r1Sorted.forEach((p, idx) => {
     const rank = idx + 1;
     r1RankMap.set(p.id, rank);
-    if (p.manualGradingOverrides?.round2 === 'graded') {
+    const overrides = p.manualGradingOverrides instanceof Map 
+      ? Object.fromEntries(p.manualGradingOverrides) 
+      : (p.manualGradingOverrides || {});
+    const r2Ov = String(overrides.round2 || '').toLowerCase().replace('-', '_');
+    if (r2Ov === 'graded') {
       gradedR2Set.add(p.id);
       qualifiedR2Set.add(p.id);
-    } else if (p.manualGradingOverrides?.round2 === 'non_graded') {
+    } else if (r2Ov === 'non_graded') {
       // Coordinator explicitly marked as non-graded
     } else if (rank <= r2GradedCount) {
       gradedR2Set.add(p.id);
@@ -1460,10 +1464,14 @@ async function computeLeaderboardData() {
   r2Sorted.forEach((p, idx) => {
     const rank = idx + 1;
     r2RankMap.set(p.id, rank);
-    if (p.manualGradingOverrides?.round3 === 'graded') {
+    const overrides = p.manualGradingOverrides instanceof Map 
+      ? Object.fromEntries(p.manualGradingOverrides) 
+      : (p.manualGradingOverrides || {});
+    const r3Ov = String(overrides.round3 || '').toLowerCase().replace('-', '_');
+    if (r3Ov === 'graded') {
       gradedR3Set.add(p.id);
       qualifiedR3Set.add(p.id);
-    } else if (p.manualGradingOverrides?.round3 === 'non_graded') {
+    } else if (r3Ov === 'non_graded') {
       // Coordinator explicitly marked as non-graded
     } else if (rank <= r3GradedCount) {
       gradedR3Set.add(p.id);
@@ -1583,6 +1591,8 @@ async function computeLeaderboardData() {
       qualifiedForRound3: isQualifiedR3,
       isGradedR2: isQualifiedR2,
       isGradedR3: isQualifiedR3,
+      isRound2Graded: isQualifiedR2,
+      isRound3Graded: isQualifiedR3,
       canParticipateR2: true,
       canParticipateR3: true,
       r1Completed: item.r1Completed,
@@ -3442,15 +3452,19 @@ app.post('/api/coordinator/participant-grading-override', async (req, res) => {
   }
   try {
     const roundKey = (round === 2 || round === '2' || round === 'round2') ? 'round2' : 'round3';
+    const normStatus = String(status || '').toLowerCase().replace('-', '_'); // 'graded' | 'non_graded' | 'auto'
+
     let user = null;
     if (isDbConnected) {
       user = await User.findOne({ id: participantId });
       if (user) {
-        if (!user.manualGradingOverrides) user.manualGradingOverrides = {};
-        if (status === 'auto') {
+        if (!user.manualGradingOverrides || typeof user.manualGradingOverrides !== 'object') {
+          user.manualGradingOverrides = {};
+        }
+        if (normStatus === 'auto') {
           delete user.manualGradingOverrides[roundKey];
         } else {
-          user.manualGradingOverrides[roundKey] = status;
+          user.manualGradingOverrides[roundKey] = normStatus;
         }
         user.markModified('manualGradingOverrides');
         await user.save();
@@ -3458,11 +3472,13 @@ app.post('/api/coordinator/participant-grading-override', async (req, res) => {
     } else {
       user = memoryStore.users.find(u => u.id === participantId);
       if (user) {
-        if (!user.manualGradingOverrides) user.manualGradingOverrides = {};
-        if (status === 'auto') {
+        if (!user.manualGradingOverrides || typeof user.manualGradingOverrides !== 'object') {
+          user.manualGradingOverrides = {};
+        }
+        if (normStatus === 'auto') {
           delete user.manualGradingOverrides[roundKey];
         } else {
-          user.manualGradingOverrides[roundKey] = status;
+          user.manualGradingOverrides[roundKey] = normStatus;
         }
       }
     }
@@ -3471,7 +3487,7 @@ app.post('/api/coordinator/participant-grading-override', async (req, res) => {
     const { formattedLeaderboard, qualifySettings } = await computeLeaderboardData();
     io.emit('leaderboard:updated', { leaderboard: formattedLeaderboard, qualifySettings });
 
-    res.json({ success: true, message: `Updated Round ${roundKey} grading override for ${participantId} to ${status}.` });
+    res.json({ success: true, message: `Updated Round ${roundKey} grading override for ${participantId} to ${normStatus}.` });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

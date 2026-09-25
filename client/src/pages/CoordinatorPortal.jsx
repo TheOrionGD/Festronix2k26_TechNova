@@ -1337,31 +1337,34 @@ export default function CoordinatorPortal() {
           {activeTab === 'cohorts' && (() => {
             const totalCount = leaderboard.length || participantsList.length || 0;
             
+            const getR2Graded = (item) => !!(item.isRound2Graded ?? item.isGradedR2 ?? item.qualifiedR2);
+            const getR3Graded = (item) => !!(item.isRound3Graded ?? item.isGradedR3 ?? item.qualifiedR3);
+
             // Round 2 Graded Target
             const r2Target = qR1Mode === 'PERCENTAGE'
               ? Math.max(1, Math.ceil(totalCount * (Number(qR1Percentage) / 100)))
               : Math.min(totalCount, Number(qR1Count));
-            const r2Actual = leaderboard.filter(p => p.isRound2Graded && !p.isDisqualified).length;
+            const r2Actual = leaderboard.filter(p => getR2Graded(p) && !p.isDisqualified).length;
             const r2NonGraded = totalCount - r2Actual;
 
             // Round 3 Graded Target
             const r3Target = qR2Mode === 'PERCENTAGE'
               ? Math.max(1, Math.ceil(r2Actual * (Number(qR2Percentage) / 100)))
               : Math.min(r2Actual || totalCount, Number(qR2Count));
-            const r3Actual = leaderboard.filter(p => p.isRound3Graded && !p.isDisqualified).length;
+            const r3Actual = leaderboard.filter(p => getR3Graded(p) && !p.isDisqualified).length;
             const r3NonGraded = totalCount - r3Actual;
 
             const disqualifiedCount = leaderboard.filter(p => p.isDisqualified || p.accountStatus === 'DISQUALIFIED').length;
 
             let displayed = [...leaderboard];
             if (cohortFilter === 'R2_GRADED') {
-              displayed = displayed.filter(p => p.isRound2Graded && !p.isDisqualified);
+              displayed = displayed.filter(p => getR2Graded(p) && !p.isDisqualified);
             } else if (cohortFilter === 'R2_NON_GRADED') {
-              displayed = displayed.filter(p => !p.isRound2Graded && !p.isDisqualified);
+              displayed = displayed.filter(p => !getR2Graded(p) && !p.isDisqualified);
             } else if (cohortFilter === 'R3_GRADED') {
-              displayed = displayed.filter(p => p.isRound3Graded && !p.isDisqualified);
+              displayed = displayed.filter(p => getR3Graded(p) && !p.isDisqualified);
             } else if (cohortFilter === 'R3_NON_GRADED') {
-              displayed = displayed.filter(p => !p.isRound3Graded && !p.isDisqualified);
+              displayed = displayed.filter(p => !getR3Graded(p) && !p.isDisqualified);
             } else if (cohortFilter === 'DISQUALIFIED') {
               displayed = displayed.filter(p => p.isDisqualified || p.accountStatus === 'DISQUALIFIED');
             }
@@ -1837,19 +1840,19 @@ export default function CoordinatorPortal() {
                                 <td className="p-3 text-center">
                                   <div className="flex flex-col items-center gap-1.5">
                                     <span className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] border ${
-                                      p.isRound2Graded
+                                      getR2Graded(p)
                                         ? 'bg-emerald-500/15 text-emerald-600 border-emerald-500/30'
                                         : 'bg-amber-500/15 text-amber-600 border-amber-500/30'
                                     }`}>
-                                      {p.isRound2Graded ? '✓ Graded' : '◎ Non-Graded'}
+                                      {getR2Graded(p) ? '✓ Graded' : '◎ Non-Graded'}
                                       {r2Override && ` (Manual)`}
                                     </span>
 
                                     <div className="flex items-center gap-1">
-                                      {p.isRound2Graded ? (
+                                      {getR2Graded(p) ? (
                                         <button
                                           type="button"
-                                          onClick={() => handleToggleGradingOverride(p.id, 2, 'NON_GRADED')}
+                                          onClick={() => handleToggleGradingOverride(p.id, 2, 'non_graded')}
                                           className="px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500 hover:text-white text-amber-700 dark:text-amber-400 font-bold text-[10px] transition cursor-pointer"
                                           title="Demote to Non-Graded for Round 2"
                                         >
@@ -1858,7 +1861,7 @@ export default function CoordinatorPortal() {
                                       ) : (
                                         <button
                                           type="button"
-                                          onClick={() => handleToggleGradingOverride(p.id, 2, 'GRADED')}
+                                          onClick={() => handleToggleGradingOverride(p.id, 2, 'graded')}
                                           className="px-2 py-0.5 rounded bg-emerald-500/20 hover:bg-emerald-600 hover:text-white text-emerald-700 dark:text-emerald-400 font-bold text-[10px] transition cursor-pointer"
                                           title="Promote to Graded for Round 2"
                                         >
@@ -1868,7 +1871,7 @@ export default function CoordinatorPortal() {
                                       {r2Override && (
                                         <button
                                           type="button"
-                                          onClick={() => handleToggleGradingOverride(p.id, 2, 'AUTO')}
+                                          onClick={() => handleToggleGradingOverride(p.id, 2, 'auto')}
                                           className="px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-800 text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 text-[10px]"
                                           title="Reset to automatic rank calculation"
                                         >
@@ -1889,19 +1892,19 @@ export default function CoordinatorPortal() {
                                 <td className="p-3 text-center">
                                   <div className="flex flex-col items-center gap-1.5">
                                     <span className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] border ${
-                                      p.isRound3Graded
+                                      getR3Graded(p)
                                         ? 'bg-emerald-500/15 text-emerald-600 border-emerald-500/30'
                                         : 'bg-amber-500/15 text-amber-600 border-amber-500/30'
                                     }`}>
-                                      {p.isRound3Graded ? '✓ Graded' : '◎ Non-Graded'}
+                                      {getR3Graded(p) ? '✓ Graded' : '◎ Non-Graded'}
                                       {r3Override && ` (Manual)`}
                                     </span>
 
                                     <div className="flex items-center gap-1">
-                                      {p.isRound3Graded ? (
+                                      {getR3Graded(p) ? (
                                         <button
                                           type="button"
-                                          onClick={() => handleToggleGradingOverride(p.id, 3, 'NON_GRADED')}
+                                          onClick={() => handleToggleGradingOverride(p.id, 3, 'non_graded')}
                                           className="px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500 hover:text-white text-amber-700 dark:text-amber-400 font-bold text-[10px] transition cursor-pointer"
                                           title="Demote to Non-Graded for Round 3"
                                         >
@@ -1910,7 +1913,7 @@ export default function CoordinatorPortal() {
                                       ) : (
                                         <button
                                           type="button"
-                                          onClick={() => handleToggleGradingOverride(p.id, 3, 'GRADED')}
+                                          onClick={() => handleToggleGradingOverride(p.id, 3, 'graded')}
                                           className="px-2 py-0.5 rounded bg-emerald-500/20 hover:bg-emerald-600 hover:text-white text-emerald-700 dark:text-emerald-400 font-bold text-[10px] transition cursor-pointer"
                                           title="Promote to Graded for Round 3"
                                         >
@@ -1920,7 +1923,7 @@ export default function CoordinatorPortal() {
                                       {r3Override && (
                                         <button
                                           type="button"
-                                          onClick={() => handleToggleGradingOverride(p.id, 3, 'AUTO')}
+                                          onClick={() => handleToggleGradingOverride(p.id, 3, 'auto')}
                                           className="px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-800 text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 text-[10px]"
                                           title="Reset to automatic rank calculation"
                                         >
