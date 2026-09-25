@@ -8,8 +8,6 @@ import {
   CheckCircle2, 
   Lock, 
   FileCode2, 
-  BookOpen, 
-  Send, 
   Megaphone, 
   FileText, 
   ChevronRight,
@@ -37,16 +35,9 @@ export default function Dashboard() {
     setCurrentScreen, 
     navigateToRound,
     isRoundUnlocked,
-    isRoundActive,
-    isRoundCompleted,
     isRoundCompletedByUser,
     formatAnnouncementTime,
-    debugSubmissions, 
-    submitDebugCode,
-    setIsCoordinatorModalOpen,
-    setPendingVerificationProblemId,
     announcements,
-    debugProblems,
     leaderboard,
     eventState,
     roundTimeLeft,
@@ -56,29 +47,11 @@ export default function Dashboard() {
   const userLeaderboardEntry = leaderboard.find(l => (l.id === currentUser?.id || l.participantId === currentUser?.id)) || {};
   const r1Score = userLeaderboardEntry.r1Score ?? userLeaderboardEntry.r1 ?? 0;
   const r2Score = userLeaderboardEntry.r2Score ?? userLeaderboardEntry.r2 ?? 0;
-  const r3Score = userLeaderboardEntry.r3Score ?? userLeaderboardEntry.r3 ?? 0;
+  const r3Score = userLeaderboardEntry.round3Score ?? userLeaderboardEntry.r3Score ?? userLeaderboardEntry.r3 ?? 0;
   const totalScore = userLeaderboardEntry.totalScore ?? userLeaderboardEntry.total ?? (r1Score + r2Score + r3Score);
   const grandBand = userLeaderboardEntry.grandBand?.band || (totalScore >= 80 ? 'Excellent' : totalScore >= 50 ? 'Good' : 'Needs Work');
 
-  const [activeProblemId, setActiveProblemId] = useState(1);
-  const currentProblem = debugProblems.find(p => p.id === activeProblemId) || debugProblems[0];
-  const submission = debugSubmissions[activeProblemId] || {};
-
-  const [correctedCodeInput, setCorrectedCodeInput] = useState(submission.code);
-  const [outputInput, setOutputInput] = useState(submission.output);
   const [announcementSearch, setAnnouncementSearch] = useState('');
-
-  const handleUpdateSubmission = (e) => {
-    e.preventDefault();
-    if (!currentProblem) return;
-    submitDebugCode(activeProblemId, correctedCodeInput, outputInput);
-    alert('Submission updated! Now request physical coordinator verification.');
-  };
-
-  const triggerVerificationModal = (probId) => {
-    setPendingVerificationProblemId(probId);
-    setIsCoordinatorModalOpen(true);
-  };
 
   const copyParticipantId = () => {
     if (currentUser?.id) {
@@ -106,7 +79,6 @@ export default function Dashboard() {
 
   const r1Done = r1UserDone || r1Concluded;
   const r2Done = r2UserDone || r2Concluded;
-  const r3Done = r3UserDone || r3Concluded;
 
   // Render Sub-Views based on Navigation Selection
   const renderWorkspaceContent = () => {

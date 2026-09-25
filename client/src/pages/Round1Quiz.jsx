@@ -27,7 +27,6 @@ export default function Round1Quiz() {
     eventState,
     requestFullScreen,
     isOffline,
-    leaderboard,
     isRoundUnlocked,
     fetchGradingStatus,
     isDisqualified,
@@ -194,7 +193,7 @@ export default function Round1Quiz() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [isSubmitting, isSubmitted, isOffline, currentUser, attemptId, userAnswers, fetchLeaderboard, handleOpenOfflineReconnection, setIsOfflineReconnectionEligible]);
+  }, [isSubmitting, isSubmitted, isOffline, currentUser, attemptId, userAnswers, fetchLeaderboard, handleOpenOfflineReconnection, setIsOfflineReconnectionEligible, markRoundCompletedByUser]);
 
   // Countdown Timer
   useEffect(() => {
@@ -216,12 +215,17 @@ export default function Round1Quiz() {
   useEffect(() => {
     if (isSubmitted || isLoading) return;
     if (eventState?.status === 'ROUND_1_ENDED' || eventState?.status === 'COMPLETED') {
-      handleSubmitQuiz();
-      return;
+      const autoSubmitTimer = setTimeout(() => {
+        handleSubmitQuiz();
+      }, 0);
+      return () => clearTimeout(autoSubmitTimer);
     }
     if (eventState?.roundEndsAt && eventState?.status === 'ROUND_1_RUNNING') {
       const globalRemSecs = Math.max(0, Math.floor((new Date(eventState.roundEndsAt).getTime() - Date.now()) / 1000));
-      setTimeLeft(prev => Math.min(prev, globalRemSecs));
+      const syncTimer = setTimeout(() => {
+        setTimeLeft(prev => Math.min(prev, globalRemSecs));
+      }, 0);
+      return () => clearTimeout(syncTimer);
     }
   }, [eventState?.roundEndsAt, eventState?.status, isSubmitted, isLoading, handleSubmitQuiz]);
 

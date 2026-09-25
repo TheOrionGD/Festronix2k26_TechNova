@@ -23,21 +23,15 @@ import {
   Sparkles,
   MessageSquare,
   Calculator,
-  Lock,
-  Eye,
   ShieldAlert,
   AlertTriangle,
   RotateCcw,
   UserX,
   Search,
-  Filter,
   GitBranch,
   Sliders,
-  Percent,
   Save,
-  RefreshCw,
-  AlertCircle,
-  ArrowRight
+  AlertCircle
 } from 'lucide-react';
 
 export default function CoordinatorPortal() {
@@ -56,7 +50,6 @@ export default function CoordinatorPortal() {
     recalculateLeaderboard,
     disqualifyParticipantManual,
     reinstateParticipant,
-    antiCheatFlags,
     updateParticipantGradingOverride,
     formatAnnouncementTime
   } = useApp();
@@ -90,13 +83,16 @@ export default function CoordinatorPortal() {
 
   useEffect(() => {
     if (eventState) {
-      if (eventState.round1QualifyMode) setQR1Mode(eventState.round1QualifyMode);
-      if (eventState.round1QualifyPercentage !== undefined) setQR1Percentage(eventState.round1QualifyPercentage);
-      if (eventState.round1QualifyCount !== undefined) setQR1Count(eventState.round1QualifyCount);
-      if (eventState.round2QualifyMode) setQR2Mode(eventState.round2QualifyMode);
-      if (eventState.round2QualifyPercentage !== undefined) setQR2Percentage(eventState.round2QualifyPercentage);
-      if (eventState.round2QualifyCount !== undefined) setQR2Count(eventState.round2QualifyCount);
-      if (eventState.round3StationCount !== undefined) setQR3Stations(eventState.round3StationCount);
+      const syncTimer = setTimeout(() => {
+        if (eventState.round1QualifyMode) setQR1Mode(eventState.round1QualifyMode);
+        if (eventState.round1QualifyPercentage !== undefined) setQR1Percentage(eventState.round1QualifyPercentage);
+        if (eventState.round1QualifyCount !== undefined) setQR1Count(eventState.round1QualifyCount);
+        if (eventState.round2QualifyMode) setQR2Mode(eventState.round2QualifyMode);
+        if (eventState.round2QualifyPercentage !== undefined) setQR2Percentage(eventState.round2QualifyPercentage);
+        if (eventState.round2QualifyCount !== undefined) setQR2Count(eventState.round2QualifyCount);
+        if (eventState.round3StationCount !== undefined) setQR3Stations(eventState.round3StationCount);
+      }, 0);
+      return () => clearTimeout(syncTimer);
     }
   }, [eventState]);
 
@@ -120,6 +116,7 @@ export default function CoordinatorPortal() {
       await fetchLeaderboard();
       setCohortActionMsg({ type: 'success', text: 'Qualification parameters updated! Dynamic cohorts have been recomputed.' });
     } catch (err) {
+      console.error('Save qualification parameters error:', err);
       setCohortActionMsg({ type: 'error', text: 'Error saving qualification parameters.' });
     } finally {
       setIsSavingQualification(false);
@@ -137,6 +134,7 @@ export default function CoordinatorPortal() {
         setCohortActionMsg({ type: 'error', text: res.message || 'Failed to update cohort status.' });
       }
     } catch (err) {
+      console.error('Toggle grading override error:', err);
       setCohortActionMsg({ type: 'error', text: 'Network error updating cohort status.' });
     } finally {
       setTimeout(() => setCohortActionMsg(null), 4000);
@@ -158,7 +156,10 @@ export default function CoordinatorPortal() {
 
   useEffect(() => {
     if (activeTab === 'malpractice') {
-      fetchMalpracticeData();
+      const timer = setTimeout(() => {
+        fetchMalpracticeData();
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [activeTab]);
 
@@ -178,6 +179,7 @@ export default function CoordinatorPortal() {
         setMalpracticeMsg({ type: 'error', text: res.message || 'Failed to disqualify participant.' });
       }
     } catch (err) {
+      console.error('Disqualify participant error:', err);
       setMalpracticeMsg({ type: 'error', text: 'Server communication error.' });
     } finally {
       setIsProcessingMalpractice(false);
@@ -197,6 +199,7 @@ export default function CoordinatorPortal() {
         setMalpracticeMsg({ type: 'error', text: res.message || 'Failed to reinstate participant.' });
       }
     } catch (err) {
+      console.error('Reinstate participant error:', err);
       setMalpracticeMsg({ type: 'error', text: 'Server communication error.' });
     } finally {
       setIsProcessingMalpractice(false);
@@ -217,6 +220,7 @@ export default function CoordinatorPortal() {
       setMalpracticeMsg({ type: 'success', text: `Official warning issued to participant ${participantId}.` });
       await fetchMalpracticeData();
     } catch (err) {
+      console.error('Issue warning error:', err);
       setMalpracticeMsg({ type: 'error', text: 'Error issuing warning.' });
     }
   };
@@ -265,7 +269,6 @@ export default function CoordinatorPortal() {
   // Leaderboard Sorting & Progression Filter State
   const [leaderboardFilter, setLeaderboardFilter] = useState('ALL'); // 'ALL' | 'R1' | 'R2' | 'R3'
   const [leaderboardSearch, setLeaderboardSearch] = useState('');
-  const [previewCalculations, setPreviewCalculations] = useState(false);
 
   const displayedParticipants = filterMyTerminal
     ? participantsList.filter(p => p.assignedCoordinator === currentUser?.id || (currentUser?.assignedRound && p.assignedRound === currentUser?.assignedRound))

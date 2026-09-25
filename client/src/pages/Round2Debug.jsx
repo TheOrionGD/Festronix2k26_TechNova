@@ -23,7 +23,6 @@ export default function Round2Debug() {
     setPendingVerificationProblemId, 
     debugSubmissions,
     isOffline, 
-    leaderboard,
     isRoundUnlocked,
     isRoundCompletedByUser,
     markRoundCompletedByUser,

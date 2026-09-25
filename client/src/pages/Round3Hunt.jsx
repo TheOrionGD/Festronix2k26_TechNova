@@ -24,7 +24,6 @@ export default function Round3Hunt() {
     setCurrentScreen, 
     requestFullScreen, 
     isOffline, 
-    leaderboard, 
     isRoundUnlocked,
     isRoundCompletedByUser,
     markRoundCompletedByUser,
@@ -145,7 +144,7 @@ export default function Round3Hunt() {
     } finally {
       setIsLoading(false);
     }
-  }, [currentUser]);
+  }, [currentUser, markRoundCompletedByUser]);
 
   useEffect(() => {
     Promise.resolve().then(() => {
